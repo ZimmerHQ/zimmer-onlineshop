@@ -67,6 +67,9 @@ app.include_router(conversations_router)
 # Add static files serving
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Add Next.js static files serving
+app.mount("/_next", StaticFiles(directory="frontend/.next"), name="next_static")
+
 # Add webhook management router
 from webhook_manager import router as webhook_router
 app.include_router(webhook_router)
@@ -99,7 +102,7 @@ async def serve_frontend(full_path: str):
     next_build_file = os.path.join("frontend/.next/server/app", f"{full_path}.html")
     if os.path.exists(next_build_file) and os.path.isfile(next_build_file):
         print(f"✅ Serving HTML file: {next_build_file}")
-        return FileResponse(next_build_file)
+        return FileResponse(next_build_file, media_type="text/html")
     
     # Check for Next.js build output in app directory without extension
     next_build_file_no_ext = os.path.join("frontend/.next/server/app", full_path)
@@ -111,14 +114,14 @@ async def serve_frontend(full_path: str):
     next_pages_file = os.path.join("frontend/.next/server/pages", full_path)
     if os.path.exists(next_pages_file) and os.path.isfile(next_pages_file):
         print(f"✅ Serving pages file: {next_pages_file}")
-        return FileResponse(next_pages_file)
+        return FileResponse(next_pages_file, media_type="text/html")
     
     # Serve index.html for root path
     if full_path == "" or full_path == "/":
         index_path = os.path.join("frontend/.next/server/app", "index.html")
         if os.path.exists(index_path):
             print(f"✅ Serving index.html: {index_path}")
-            return FileResponse(index_path)
+            return FileResponse(index_path, media_type="text/html")
         else:
             print(f"❌ index.html not found at: {index_path}")
     
@@ -126,7 +129,7 @@ async def serve_frontend(full_path: str):
     pages_index_path = os.path.join("frontend/.next/server/pages", "index.html")
     if os.path.exists(pages_index_path):
         print(f"✅ Serving pages index.html: {pages_index_path}")
-        return FileResponse(pages_index_path)
+        return FileResponse(pages_index_path, media_type="text/html")
     
     # Debug: List what we found
     print(f"❌ No frontend file found for path: '{full_path}'")
