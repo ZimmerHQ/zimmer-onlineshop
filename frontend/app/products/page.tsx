@@ -297,7 +297,7 @@ export default function ProductsPage() {
         price: Number(formData.price),
         sizes: formData.sizes.split(',').map(s => s.trim()).filter(s => s.length > 0),
         image_url: finalImageUrl,
-        thumbnail_url: uploadResult?.thumbnail_url || null,
+        thumbnail_url: uploadResult?.thumbnail_url || undefined,
         stock: Number(formData.stock)
       }
       
