@@ -84,19 +84,20 @@ def _summary(state: ConversationState, name_override: str | None = None) -> str:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(get_db)):
-    # Debug log raw request for troubleshooting
-    raw_body = await raw.body()
-    logging.info(f"📥 Raw request body: {raw_body.decode(errors='ignore')}")
-    logging.info(f"✅ Parsed: conversation_id={req.conversation_id}, message={req.message}")
-
-    state = _get_state(req.conversation_id)
-    user_text = (req.message or "").strip()
-
-    # Log user message
     try:
-        log_message(db, req.conversation_id, role="user", text=user_text, intent=None, slots=state.slots.model_dump())
-    except Exception as e:
-        print("⚠️ failed to log incoming message:", repr(e))
+        # Debug log raw request for troubleshooting
+        raw_body = await raw.body()
+        logging.info(f"📥 Raw request body: {raw_body.decode(errors='ignore')}")
+        logging.info(f"✅ Parsed: conversation_id={req.conversation_id}, message={req.message}")
+
+        state = _get_state(req.conversation_id)
+        user_text = (req.message or "").strip()
+
+        # Log user message
+        try:
+            log_message(db, req.conversation_id, role="user", text=user_text, intent=None, slots=state.slots.model_dump())
+        except Exception as e:
+            print("⚠️ failed to log incoming message:", repr(e))
 
     # Fallback GPT response if LLM agent fails
     fallback_gpt_response = None
