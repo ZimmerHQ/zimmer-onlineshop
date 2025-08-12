@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: insta-backend
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      cd frontend && npm install && npm run build
+    startCommand: python start_server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        value: sqlite:///app.db
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render dashboard 
