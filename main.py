@@ -80,7 +80,27 @@ app.mount("/telegram", telegram_app)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "message": "Backend API is running"}
+    try:
+        # Test database connection
+        from database import get_db
+        from sqlalchemy.orm import Session
+        from sqlalchemy import text
+        
+        db = next(get_db())
+        result = db.execute(text("SELECT 1"))
+        db.close()
+        
+        return {
+            "status": "healthy", 
+            "message": "Backend API is running",
+            "database": "connected"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy", 
+            "message": f"Server error: {str(e)}",
+            "database": "error"
+        }
 
 # Fallback route for SPA routing (must be last)
 @app.get("/{full_path:path}")
