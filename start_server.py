@@ -39,14 +39,13 @@ def start_frontend():
     os.chdir(frontend_dir)
     
     try:
-        # Install dependencies if needed
-        if not (frontend_dir / "node_modules").exists():
+        # Check if frontend is already built
+        if not (frontend_dir / ".next").exists():
             print("📦 Installing frontend dependencies...")
             subprocess.run(["npm", "install"], check=True)
-        
-        # Build the frontend for production
-        print("🔨 Building frontend for production...")
-        subprocess.run(["npm", "run", "build"], check=True)
+            
+            print("🔨 Building frontend for production...")
+            subprocess.run(["npm", "run", "build"], check=True)
         
         # Start the production server
         print("🌐 Starting frontend production server...")
