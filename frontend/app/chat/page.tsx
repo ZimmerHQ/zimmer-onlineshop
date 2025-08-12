@@ -22,6 +22,9 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
+      console.log("🔗 Making API call to:", `${apiBase}/api/chat`);
+      console.log("📤 Request payload:", { conversation_id: "default", message: input });
+      
       const response = await fetch(`${apiBase}/api/chat`, {
         method: "POST",
         mode: 'cors',
@@ -34,13 +37,20 @@ export default function ChatPage() {
         }),
       });
 
+      console.log("📥 Response status:", response.status);
+      console.log("📥 Response headers:", Object.fromEntries(response.headers.entries()));
+      
       const data = await response.json();
+      console.log("📥 Response data:", data);
+      
       if (data.reply) {
+        console.log("✅ Setting bot reply:", data.reply);
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: data.reply },
         ]);
       } else {
+        console.log("❌ No reply in response");
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: "پاسخی دریافت نشد." },
@@ -48,17 +58,9 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error("خطا در ارسال پیام:", error);
-      // Demo fallback response for testing
-      const demoResponses = [
-        "سلام! چطور می‌تونم کمکتون کنم؟ 😊",
-        "این یک پاسخ نمونه برای تست است. در حالت واقعی، اینجا پاسخ GPT قرار می‌گیرد.",
-        "متأسفانه سرور در دسترس نیست، اما این پیام برای تست نمایش داده می‌شود.",
-        "برای سوالات بیشتر، لطفاً بعداً تلاش کنید."
-      ];
-      const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)];
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: randomResponse },
+        { role: "assistant", content: "متأسفانه خطایی رخ داد. لطفاً دوباره تلاش کنید." },
       ]);
     }
 
