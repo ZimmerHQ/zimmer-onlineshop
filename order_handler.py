@@ -192,6 +192,13 @@ def update_order(order_id: int, order_update: OrderUpdate, db: Session = Depends
     
     for field, value in update_data.items():
         if field == "status" and value:
+            # Convert string status to enum if needed
+            if isinstance(value, str):
+                try:
+                    value = OrderStatus(value.lower())
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid status: {value}")
+            
             # Update status-specific timestamps
             if value == OrderStatus.CONFIRMED and not order.confirmed_at:
                 order.confirmed_at = datetime.utcnow()
@@ -200,17 +207,29 @@ def update_order(order_id: int, order_update: OrderUpdate, db: Session = Depends
             elif value == OrderStatus.DELIVERED and not order.delivered_at:
                 order.delivered_at = datetime.utcnow()
         
+        elif field == "payment_status" and value:
+            # Convert string payment_status to enum if needed
+            if isinstance(value, str):
+                try:
+                    value = PaymentStatus(value.lower())
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid payment_status: {value}")
+        
         setattr(order, field, value)
         logger.info(f"✅ Updated {field}: {value}")
     
     # Update the updated_at timestamp
     order.updated_at = datetime.utcnow()
     
-    db.commit()
-    db.refresh(order)
-    
-    logger.info(f"✅ Order {order_id} updated successfully")
-    return order
+    try:
+        db.commit()
+        db.refresh(order)
+        logger.info(f"✅ Order {order_id} updated successfully")
+        return order
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error updating order {order_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)

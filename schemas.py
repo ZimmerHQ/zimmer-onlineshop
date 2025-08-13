@@ -89,8 +89,8 @@ class OrderCreate(BaseModel):
 
 
 class OrderUpdate(BaseModel):
-    status: Optional[OrderStatus] = None
-    payment_status: Optional[PaymentStatus] = None
+    status: Optional[str] = None  # Accept string values from frontend
+    payment_status: Optional[str] = None  # Accept string values from frontend
     payment_method: Optional[str] = None
     shipping_method: Optional[str] = None
     tracking_number: Optional[str] = None
