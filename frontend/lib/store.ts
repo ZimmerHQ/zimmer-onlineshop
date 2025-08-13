@@ -459,7 +459,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ loading: true, errors: null });
     try {
       const response = await fetch(`${apiBase}/api/orders/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData)
@@ -471,9 +471,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           loading: false
         }));
       } else {
+        const errorData = await response.text();
+        console.error('Order update failed:', errorData);
         set({ errors: 'Failed to update order', loading: false });
       }
     } catch (error) {
+      console.error('Order update error:', error);
       set({ errors: 'Network error', loading: false });
     }
   },

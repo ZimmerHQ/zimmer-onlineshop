@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from typing import List, Optional
 from datetime import datetime
-from models import Message, User
+from models import ChatMessage, User
 from database import get_db
 from schemas import ConversationOut, MessageOut
 
@@ -21,18 +21,15 @@ def get_conversations(
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    """Get all conversations grouped by user"""
+    """Get all conversations grouped by conversation_id"""
     try:
-        # Get all users with their message counts and last message info
+        # Get all conversation_ids with their message counts and last message info
         conversations_query = db.query(
-            User.id.label('user_id'),
-            User.chat_id,
-            User.username,
-            func.count(Message.id).label('message_count'),
-            func.max(Message.id).label('last_message_id')
-        ).join(Message, User.id == Message.user_id)\
-         .group_by(User.id, User.chat_id, User.username)\
-         .order_by(desc(func.max(Message.id)))\
+            ChatMessage.conversation_id,
+            func.count(ChatMessage.id).label('message_count'),
+            func.max(ChatMessage.id).label('last_message_id')
+        ).group_by(ChatMessage.conversation_id)\
+         .order_by(desc(func.max(ChatMessage.id)))\
          .offset(offset)\
          .limit(limit)
         
@@ -41,30 +38,30 @@ def get_conversations(
         # Convert to response format
         conversation_list = []
         for conv in conversations:
-            # Get the last message for this user
-            last_message = db.query(Message).filter(
-                Message.user_id == conv.user_id
-            ).order_by(desc(Message.id)).first()
+            # Get the last message for this conversation
+            last_message = db.query(ChatMessage).filter(
+                ChatMessage.conversation_id == conv.conversation_id
+            ).order_by(desc(ChatMessage.id)).first()
             
-            # Get all messages for this user (limited to last 50 for performance)
-            messages = db.query(Message).filter(
-                Message.user_id == conv.user_id
-            ).order_by(Message.id.desc()).limit(50).all()
+            # Get all messages for this conversation (limited to last 50 for performance)
+            messages = db.query(ChatMessage).filter(
+                ChatMessage.conversation_id == conv.conversation_id
+            ).order_by(ChatMessage.id.desc()).limit(50).all()
             
             # Convert messages to response format
             message_list = []
             for msg in reversed(messages):  # Reverse to get chronological order
                 message_list.append(MessageOut(
                     id=str(msg.id),
-                    userId=str(msg.user_id),
+                    userId=msg.conversation_id,  # Use conversation_id as userId
                     content=msg.text,
                     timestamp=msg.created_at,
                     isFromUser=msg.role == 'user'
                 ))
             
             conversation_list.append(ConversationOut(
-                id=str(conv.user_id),
-                userId=str(conv.user_id),
+                id=conv.conversation_id,
+                userId=conv.conversation_id,
                 messages=message_list,
                 lastMessage=last_message.text if last_message else "",
                 lastMessageTime=last_message.created_at if last_message else datetime.utcnow()
@@ -81,54 +78,55 @@ def get_conversations(
         )
 
 
-@router.get("/{user_id}/messages", response_model=List[MessageOut])
-def get_user_messages(
-    user_id: int,
+@router.get("/{conversation_id}/messages", response_model=List[MessageOut])
+def get_conversation_messages(
+    conversation_id: str,
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    """Get all messages for a specific user"""
+    """Get all messages for a specific conversation"""
     try:
-        messages = db.query(Message).filter(
-            Message.user_id == user_id
-        ).order_by(Message.id.desc()).offset(offset).limit(limit).all()
+        messages = db.query(ChatMessage).filter(
+            ChatMessage.conversation_id == conversation_id
+        ).order_by(ChatMessage.id.desc()).offset(offset).limit(limit).all()
         
         # Convert to response format
         message_list = []
         for msg in reversed(messages):  # Reverse to get chronological order
             message_list.append(MessageOut(
                 id=str(msg.id),
-                userId=str(msg.user_id),
+                userId=msg.conversation_id,
                 content=msg.text,
                 timestamp=msg.created_at,
                 isFromUser=msg.role == 'user'
             ))
         
-        logger.info(f"📨 Retrieved {len(message_list)} messages for user {user_id}")
+        logger.info(f"📝 Retrieved {len(message_list)} messages for conversation {conversation_id}")
         return message_list
         
     except Exception as e:
-        logger.error(f"❌ Error fetching messages for user {user_id}: {str(e)}")
+        logger.error(f"❌ Error fetching messages: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطا در دریافت پیام‌ها: {str(e)}"
         )
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_conversation(user_id: int, db: Session = Depends(get_db)):
-    """Delete all messages for a specific user"""
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """Delete all messages for a specific conversation"""
     try:
-        # Delete all messages for this user
-        deleted_count = db.query(Message).filter(Message.user_id == user_id).delete()
-        db.commit()
+        deleted_count = db.query(ChatMessage).filter(
+            ChatMessage.conversation_id == conversation_id
+        ).delete()
         
-        logger.info(f"🗑️ Deleted {deleted_count} messages for user {user_id}")
+        db.commit()
+        logger.info(f"🗑️ Deleted {deleted_count} messages for conversation {conversation_id}")
+        return None
         
     except Exception as e:
-        logger.error(f"❌ Error deleting conversation for user {user_id}: {str(e)}")
-        db.rollback()
+        logger.error(f"❌ Error deleting conversation: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"خطا در حذف گفتگو: {str(e)}"
