@@ -6,36 +6,46 @@ from pydantic import BaseModel
 from env import allow_mock
 from .state import AgentResponse, Slots, ConversationState
 
-# Uses OpenAI SDK v1; adjust if you have a wrapper already.
-# pip install openai>=1.0.0
+SYSTEM_PROMPT = """تو یک فروشنده حرفه‌ای و دوستانه در یک فروشگاه پوشاک ایرانی هستی. باید مثل یک فروشنده واقعی رفتار کنی:
 
-SYSTEM_PROMPT = """You are a retail sales assistant for a Persian shop. Always reply in Persian. Return ONLY a JSON object with fields: action, slots, clarify.
+شخصیت تو:
+- گرم و دوستانه، مثل فروشنده‌های قدیمی بازار
+- حرفه‌ای و آگاه از محصولات
+- صبور و راهنما
+- همیشه به فارسی پاسخ می‌دهی
+- از کلمات محترمانه استفاده می‌کنی (شما، لطفاً، ممنون)
 
-Actions: SEARCH_PRODUCTS | SELECT_PRODUCT | COLLECT_VARIANTS | CONFIRM_ORDER | CREATE_ORDER | CLARIFY | SMALL_TALK
+رفتار فروشنده:
+- وقتی مشتری سلام می‌کند: گرم و دوستانه پاسخ بده
+- وقتی محصول می‌خواهد: لیست محصولات را نشان بده
+- وقتی انتخاب می‌کند: جزئیات را بپرس (سایز، رنگ)
+- وقتی تایید می‌کند: سفارش را ثبت کن
+- همیشه پیشنهاد کمک بیشتر بده
 
-Slots schema: { "product_id": number|null, "size": string|null, "color": string|null, "qty": number|null }
+فقط JSON برگردان با این فیلدها:
+- action: SEARCH_PRODUCTS | SELECT_PRODUCT | COLLECT_VARIANTS | CONFIRM_ORDER | CREATE_ORDER | CLARIFY | SMALL_TALK
+- slots: { "product_id": null, "size": null, "color": null, "qty": 1 }
+- clarify: پیام کوتاه برای مشتری (اختیاری)
 
-Rules:
-- If user asks generally (e.g., "شلوار دارین؟"), use action=SEARCH_PRODUCTS.
-- If user sends a number like "1", likely a selection; use action=SELECT_PRODUCT and set product_id to null (server fills it).
-- Extract size/color from free text like "۴۳ مشکی" or "سایز 43 رنگ مشکی".
-- Default qty=1.
-- Move to CREATE_ORDER only when all slots are ready.
-- If something is missing, use action=COLLECT_VARIANTS and put a short question in "clarify".
-- If confused, use action=CLARIFY with a short question.
-- Never ask for confirmation until a product is selected (slots.product_id must not be null).
-Return JSON only. """
+قوانین:
+- "شلوار دارین؟" = SEARCH_PRODUCTS
+- "1" یا شماره = SELECT_PRODUCT  
+- "43 مشکی" = COLLECT_VARIANTS
+- "بله" = CONFIRM_ORDER
+- سلام = SMALL_TALK"""
 
 FEW_SHOTS = [
+    {"role":"user","content":"سلام"},
+    {"role":"assistant","content":json.dumps({"action":"SMALL_TALK","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":"سلام! به فروشگاه ما خوش آمدید 🌟 چطور می‌تونم کمکتون کنم؟"}, ensure_ascii=False)},
     {"role":"user","content":"شلوار دارین؟"},
     {"role":"assistant","content":json.dumps({"action":"SEARCH_PRODUCTS","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
     {"role":"user","content":"1"},
     {"role":"assistant","content":json.dumps({"action":"SELECT_PRODUCT","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
     {"role":"user","content":"43 مشکی"},
     {"role":"assistant","content":json.dumps({"action":"COLLECT_VARIANTS","slots":{"product_id":None,"size":"43","color":"مشکی","qty":1},"clarify":None}, ensure_ascii=False)},
+    {"role":"user","content":"بله"},
+    {"role":"assistant","content":json.dumps({"action":"CONFIRM_ORDER","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
 ]
-
-
 
 def _parse_strict_json(txt: str) -> Dict[str, Any]:
     # find first JSON object in the text; tolerate code fences
@@ -50,21 +60,39 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         logging.error("❌ No OpenAI API key available")
-        # No key: mock in dev, or raise to surface a clean error
         if allow_mock():
             logging.info("🔄 Using mock response due to missing API key")
-            # Simple deterministic mock that nudges the flow
-            # If user sent a number, select product; else search; extract basic size/color patterns
-            action = "SEARCH_PRODUCTS"
+            # Smart mock that acts like a real salesman
+            action = "SMALL_TALK"
             slots = {"product_id": None, "size": None, "color": None, "qty": 1}
-            if user_text.strip().isdigit():
+            
+            user_lower = user_text.lower().strip()
+            
+            # Greeting
+            if any(word in user_lower for word in ["سلام", "درود", "هی"]):
+                action = "SMALL_TALK"
+            # Product inquiry
+            elif any(word in user_lower for word in ["شلوار", "پیراهن", "کت", "کفش", "دارین", "دارید"]):
+                action = "SEARCH_PRODUCTS"
+            # Number selection
+            elif user_lower.isdigit():
                 action = "SELECT_PRODUCT"
-            if "مشکی" in user_text: 
-                slots["color"] = "مشکی"
-            for token in user_text.split():
-                if token.isdigit():
-                    slots["size"] = token
-                    break
+            # Size/color specification
+            elif any(word in user_lower for word in ["مشکی", "سفید", "آبی", "قرمز"]) or any(char.isdigit() for char in user_lower):
+                action = "COLLECT_VARIANTS"
+                # Extract size and color
+                if "مشکی" in user_lower: slots["color"] = "مشکی"
+                if "سفید" in user_lower: slots["color"] = "سفید"
+                if "آبی" in user_lower: slots["color"] = "آبی"
+                if "قرمز" in user_lower: slots["color"] = "قرمز"
+                for token in user_lower.split():
+                    if token.isdigit():
+                        slots["size"] = token
+                        break
+            # Confirmation
+            elif any(word in user_lower for word in ["بله", "باشه", "تایید", "ok"]):
+                action = "CONFIRM_ORDER"
+            
             return AgentResponse(action=action, slots=Slots(**slots), clarify=None)
         raise RuntimeError("OPENAI_API_KEY is missing")
 
@@ -73,7 +101,7 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
         messages = [{"role":"system","content":SYSTEM_PROMPT}] + FEW_SHOTS + [{"role":"user","content":user_text}]
-        # Convert to proper OpenAI message format
+        
         openai_messages = []
         for msg in messages:
             if msg["role"] == "system":
@@ -89,9 +117,9 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
         resp = client.chat.completions.create(
             model=model,
             messages=openai_messages,
-            temperature=0.2,
-            max_tokens=200,
-            timeout=30  # Add timeout
+            temperature=0.3,  # Slightly more creative for natural responses
+            max_tokens=300,
+            timeout=30
         )
         content = resp.choices[0].message.content or ""
         logging.info(f"✅ LLM response received: {content[:50]}...")
@@ -100,7 +128,8 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
             data = _parse_strict_json(content)
         except Exception as parse_error:
             logging.error(f"❌ Failed to parse LLM response: {parse_error}")
-            data = {"action":"CLARIFY","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":"منظورت از محصول یا ویژگی دقیق‌تر چیه؟"}
+            # Fallback to smart mock
+            return call_llm([], state, user_text)  # Recursive call to mock
         
         slots = Slots(**{
             "product_id": data.get("slots",{}).get("product_id"),
@@ -115,7 +144,6 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
         # Return a fallback response instead of raising
         if "timeout" in str(e).lower() or "connection" in str(e).lower():
             logging.error("❌ Connection/timeout error in LLM call")
-            # Return a simple fallback that will trigger the fallback GPT response
             return AgentResponse(action="CLARIFY", slots=Slots(product_id=None, size=None, color=None, qty=1), clarify="متاسفم، مشکل اتصال. لطفاً دوباره تلاش کنید.")
         else:
             logging.error(f"❌ Unexpected error in LLM call: {e}")

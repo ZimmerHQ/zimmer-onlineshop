@@ -60,8 +60,9 @@ def _get_state(cid: str) -> ConversationState:
 def _render_list_and_store(state: ConversationState, products, prefix: str = "") -> ChatResponse:
     state.last_list = []
     if not products:
-        return ChatResponse(reply=prefix + "فعلاً محصولی مطابق جستجو پیدا نشد. نام یا دستهٔ دیگری را بفرست.", slots=state.slots)
-    lines = [prefix + "محصولات موجود:"]
+        return ChatResponse(reply="متاسفم، فعلاً محصولی مطابق درخواست شما نداریم. 🥺\n\nمی‌خواهید محصولات دیگر را ببینید؟ یا نام محصول خاصی مدنظرتان است؟", slots=state.slots)
+    
+    lines = ["🌟 محصولات موجود در فروشگاه ما:"]
     for i, p in enumerate(products[:5], start=1):
         li = ListItem(
             idx=i,
@@ -74,13 +75,22 @@ def _render_list_and_store(state: ConversationState, products, prefix: str = "")
         state.last_list.append(li)
         sizes = ",".join(li.sizes or [])
         colors = ",".join(li.colors or [])
-        lines.append(f"{i}) {li.name} — {li.price:.0f} تومان — سایزها: {sizes or '-'} — رنگ‌ها: {colors or '-'}")
-    lines.append("برای انتخاب، فقط شماره را بفرست.")
+        lines.append(f"📦 {i}) {li.name}")
+        lines.append(f"   💰 قیمت: {li.price:,.0f} تومان")
+        if sizes and sizes != '-':
+            lines.append(f"   📏 سایزهای موجود: {sizes}")
+        if colors and colors != '-':
+            lines.append(f"   🎨 رنگ‌های موجود: {colors}")
+        lines.append("")
+    
+    lines.append("✨ برای انتخاب محصول مورد نظر، فقط شماره آن را بفرستید.")
+    lines.append("🤝 اگر سوالی دارید، حتماً بپرسید!")
+    
     return ChatResponse(reply="\n".join(lines), slots=state.slots)
 
 def _summary(state: ConversationState, name_override: str | None = None) -> str:
     name = name_override or next((it.name for it in state.last_list if it.product_id == state.slots.product_id), "-")
-    return f"خلاصه سفارش: {name}، سایز {state.slots.size}، رنگ {state.slots.color}، تعداد {state.slots.qty or 1}"
+    return f"📋 خلاصه سفارش شما:\n• محصول: {name}\n• سایز: {state.slots.size}\n• رنگ: {state.slots.color}\n• تعداد: {state.slots.qty or 1}"
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(get_db)):
@@ -145,14 +155,14 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                 state.slots.product_id = pid
                 need = missing_fields(state.slots)
                 if "size" in need or "color" in need:
-                    resp = ChatResponse(reply="سایز و رنگ مورد نظرت را بگو (مثلاً: 43 مشکی).", slots=state.slots)
+                    resp = ChatResponse(reply="عالی! 🎉 این محصول را انتخاب کردید.\n\n📏 لطفاً سایز و رنگ مورد نظرتان را بفرستید (مثلاً: 43 مشکی).", slots=state.slots)
                     # Log assistant reply
                     try:
                         log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="COLLECT_VARIANTS", slots=state.slots.model_dump())
                     except Exception as e:
                         print("⚠️ failed to log assistant message:", repr(e))
                     return resp
-                resp = ChatResponse(reply=_summary(state) + "\nتایید می‌کنی؟", slots=state.slots)
+                resp = ChatResponse(reply=f"{_summary(state)}\n\n✅ آیا این سفارش را تایید می‌کنید؟", slots=state.slots)
                 # Log assistant reply
                 try:
                     log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CONFIRM_ORDER", slots=state.slots.model_dump())
@@ -174,14 +184,14 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                 state.slots.product_id = int(getattr(only, "id", 1))
                 need = missing_fields(state.slots)
                 if "size" in need or "color" in need:
-                    resp = ChatResponse(reply=f"{_summary(state, name_override=state.last_list[0].name)}\nسایز و رنگ را بگو (مثلاً: 43 مشکی).", slots=state.slots)
+                    resp = ChatResponse(reply=f"🎯 فقط یک محصول مطابق درخواست شما پیدا کردم:\n\n{_summary(state, name_override=state.last_list[0].name)}\n\n📏 لطفاً سایز و رنگ مورد نظرتان را بفرستید (مثلاً: 43 مشکی).", slots=state.slots)
                     # Log assistant reply
                     try:
                         log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="COLLECT_VARIANTS", slots=state.slots.model_dump())
                     except Exception as e:
                         print("⚠️ failed to log assistant message:", repr(e))
                     return resp
-                resp = ChatResponse(reply=_summary(state) + "\nتایید می‌کنی؟", slots=state.slots)
+                resp = ChatResponse(reply=f"{_summary(state)}\n\n✅ آیا این سفارش را تایید می‌کنید؟", slots=state.slots)
                 # Log assistant reply
                 try:
                     log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CONFIRM_ORDER", slots=state.slots.model_dump())
@@ -201,7 +211,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
         if action == "SELECT_PRODUCT":
             # User sent a number - select from last_list
             if not state.last_list:
-                resp = ChatResponse(reply="لطفاً اول محصول را انتخاب کن. اگر لیست می‌خواهی اسم محصول یا دسته را بفرست.", slots=state.slots)
+                resp = ChatResponse(reply="🤔 لطفاً ابتدا محصول مورد نظرتان را انتخاب کنید.\n\n💡 اگر می‌خواهید لیست محصولات را ببینید، نام محصول یا دسته مورد نظرتان را بفرستید.", slots=state.slots)
                 # Log assistant reply
                 try:
                     log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CLARIFY", slots=state.slots.model_dump())
@@ -216,14 +226,14 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                     state.slots.product_id = selected.product_id
                     need = missing_fields(state.slots)
                     if "size" in need or "color" in need:
-                        resp = ChatResponse(reply=f"{_summary(state, name_override=selected.name)}\nسایز و رنگ را بگو (مثلاً: 43 مشکی).", slots=state.slots)
+                        resp = ChatResponse(reply=f"🎉 انتخاب عالی! شما {selected.name} را انتخاب کردید.\n\n{_summary(state, name_override=selected.name)}\n\n📏 لطفاً سایز و رنگ مورد نظرتان را بفرستید (مثلاً: 43 مشکی).", slots=state.slots)
                         # Log assistant reply
                         try:
                             log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="COLLECT_VARIANTS", slots=state.slots.model_dump())
                         except Exception as e:
                             print("⚠️ failed to log assistant message:", repr(e))
                         return resp
-                    resp = ChatResponse(reply=_summary(state) + "\nتایید می‌کنی؟", slots=state.slots)
+                    resp = ChatResponse(reply=f"{_summary(state)}\n\n✅ آیا این سفارش را تایید می‌کنید؟", slots=state.slots)
                     # Log assistant reply
                     try:
                         log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CONFIRM_ORDER", slots=state.slots.model_dump())
@@ -231,7 +241,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                         print("⚠️ failed to log assistant message:", repr(e))
                     return resp
                 else:
-                    resp = ChatResponse(reply="شماره نامعتبر است. لطفاً شماره صحیح را انتخاب کن.", slots=state.slots)
+                    resp = ChatResponse(reply="❌ شماره وارد شده صحیح نیست.\n\n📝 لطفاً یکی از شماره‌های موجود در لیست را انتخاب کنید.", slots=state.slots)
                     # Log assistant reply
                     try:
                         log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CLARIFY", slots=state.slots.model_dump())
@@ -239,7 +249,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                         print("⚠️ failed to log assistant message:", repr(e))
                     return resp
             except ValueError:
-                resp = ChatResponse(reply="لطفاً فقط شماره محصول را بفرست.", slots=state.slots)
+                resp = ChatResponse(reply="📝 لطفاً فقط شماره محصول مورد نظرتان را بفرستید.", slots=state.slots)
                 # Log assistant reply
                 try:
                     log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CLARIFY", slots=state.slots.model_dump())
@@ -318,7 +328,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                     # reset slots for next order, keep last_list for convenience
                     pid = state.slots.product_id
                     state.slots = Slots(product_id=pid, size=None, color=None, qty=1)
-                    resp = ChatResponse(reply=f"سفارش با موفقیت ثبت شد ✅ کد سفارش: {order.get('id','-')}", slots=state.slots)
+                    resp = ChatResponse(reply=f"🎉 تبریک! سفارش شما با موفقیت ثبت شد!\n\n📋 کد سفارش: {order.get('id','-')}\n\n🙏 ممنون از اعتماد شما به فروشگاه ما.\n\n💡 اگر نیاز به محصول دیگری دارید، حتماً بفرمایید!", slots=state.slots)
                     # Log assistant reply
                     try:
                         log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="ORDER_CREATED", slots=state.slots.model_dump())
@@ -327,7 +337,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                     return resp
                 except Exception as e:
                     print("Order error:", repr(e))
-                    resp = ChatResponse(reply="متأسفانه هنگام ثبت سفارش خطایی رخ داد. لطفاً دوباره امتحان کن.", slots=state.slots)
+                    resp = ChatResponse(reply="😔 متأسفانه هنگام ثبت سفارش خطایی رخ داد.\n\n🔄 لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.", slots=state.slots)
                     # Log assistant reply
                     try:
                         log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="ERROR", slots=state.slots.model_dump())
@@ -336,7 +346,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                     return resp
             else:
                 # User didn't confirm - ask again
-                resp = ChatResponse(reply=_summary(state) + "\nتایید می‌کنی؟ (بله/خیر)", slots=state.slots)
+                resp = ChatResponse(reply=f"{_summary(state)}\n\n❓ آیا این سفارش را تایید می‌کنید؟ (بله/خیر)", slots=state.slots)
                 # Log assistant reply
                 try:
                     log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CONFIRM_ORDER", slots=state.slots.model_dump())
@@ -400,7 +410,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                 # reset slots for next order, keep last_list for convenience
                 pid = state.slots.product_id
                 state.slots = Slots(product_id=pid, size=None, color=None, qty=1)
-                resp = ChatResponse(reply=f"سفارش با موفقیت ثبت شد ✅ کد سفارش: {order.get('id','-')}", slots=state.slots)
+                resp = ChatResponse(reply=f"🎉 تبریک! سفارش شما با موفقیت ثبت شد!\n\n📋 کد سفارش: {order.get('id','-')}\n\n🙏 ممنون از اعتماد شما به فروشگاه ما.\n\n💡 اگر نیاز به محصول دیگری دارید، حتماً بفرمایید!", slots=state.slots)
                 # Log assistant reply
                 try:
                     log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="ORDER_CREATED", slots=state.slots.model_dump())
@@ -418,7 +428,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                 return resp
 
         if action == "SMALL_TALK":
-            resp = ChatResponse(reply="در خدمتم. اگر محصول خاصی مدنظرته بگو تا راهنمایی کنم.", slots=state.slots)
+            resp = ChatResponse(reply="سلام! 🌟 به فروشگاه ما خوش آمدید!\n\n👔 من آماده‌ام تا در انتخاب محصولات مورد نظرتان کمکتان کنم.\n\n💡 چه محصولی مدنظرتان است؟ (مثل شلوار، پیراهن، کت و...)", slots=state.slots)
             # Log assistant reply
             try:
                 log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="SMALL_TALK", slots=state.slots.model_dump())
@@ -437,7 +447,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
             return resp
         
         # Use agent clarification or default message
-        resp = ChatResponse(reply=agent.clarify or "منظورت از محصول یا ویژگی دقیق‌تر چیه؟", slots=state.slots)
+        resp = ChatResponse(reply=agent.clarify or "🤔 متوجه نشدم منظورتان چیست.\n\n💡 لطفاً واضح‌تر بفرمایید که چه محصولی مدنظرتان است؟", slots=state.slots)
         # Log assistant reply
         try:
             log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CLARIFY", slots=state.slots.model_dump())
