@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from env import allow_mock
@@ -48,8 +49,10 @@ def _parse_strict_json(txt: str) -> Dict[str, Any]:
 def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: str) -> AgentResponse:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
+        logging.error("❌ No OpenAI API key available")
         # No key: mock in dev, or raise to surface a clean error
         if allow_mock():
+            logging.info("🔄 Using mock response due to missing API key")
             # Simple deterministic mock that nudges the flow
             # If user sent a number, select product; else search; extract basic size/color patterns
             action = "SEARCH_PRODUCTS"
@@ -66,33 +69,54 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
         raise RuntimeError("OPENAI_API_KEY is missing")
 
     # Real call
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-    messages = [{"role":"system","content":SYSTEM_PROMPT}] + FEW_SHOTS + [{"role":"user","content":user_text}]
-    # Convert to proper OpenAI message format
-    openai_messages = []
-    for msg in messages:
-        if msg["role"] == "system":
-            openai_messages.append({"role": "system", "content": msg["content"]})
-        elif msg["role"] == "user":
-            openai_messages.append({"role": "user", "content": msg["content"]})
-        elif msg["role"] == "assistant":
-            openai_messages.append({"role": "assistant", "content": msg["content"]})
-    resp = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL","gpt-4o-mini"),
-        messages=openai_messages,
-        temperature=0.2,
-        max_tokens=200
-    )
-    content = resp.choices[0].message.content or ""
     try:
-        data = _parse_strict_json(content)
-    except Exception:
-        data = {"action":"CLARIFY","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":"منظورت از محصول یا ویژگی دقیق‌تر چیه؟"}
-    slots = Slots(**{
-        "product_id": data.get("slots",{}).get("product_id"),
-        "size": data.get("slots",{}).get("size"),
-        "color": data.get("slots",{}).get("color"),
-        "qty": data.get("slots",{}).get("qty",1) or 1,
-    })
-    return AgentResponse(action=data.get("action","CLARIFY"), slots=slots, clarify=data.get("clarify")) 
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        messages = [{"role":"system","content":SYSTEM_PROMPT}] + FEW_SHOTS + [{"role":"user","content":user_text}]
+        # Convert to proper OpenAI message format
+        openai_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                openai_messages.append({"role": "system", "content": msg["content"]})
+            elif msg["role"] == "user":
+                openai_messages.append({"role": "user", "content": msg["content"]})
+            elif msg["role"] == "assistant":
+                openai_messages.append({"role": "assistant", "content": msg["content"]})
+        
+        model = os.getenv("OPENAI_MODEL","gpt-4o-mini")
+        logging.info(f"🤖 Calling LLM with model: {model}")
+        
+        resp = client.chat.completions.create(
+            model=model,
+            messages=openai_messages,
+            temperature=0.2,
+            max_tokens=200,
+            timeout=30  # Add timeout
+        )
+        content = resp.choices[0].message.content or ""
+        logging.info(f"✅ LLM response received: {content[:50]}...")
+        
+        try:
+            data = _parse_strict_json(content)
+        except Exception as parse_error:
+            logging.error(f"❌ Failed to parse LLM response: {parse_error}")
+            data = {"action":"CLARIFY","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":"منظورت از محصول یا ویژگی دقیق‌تر چیه؟"}
+        
+        slots = Slots(**{
+            "product_id": data.get("slots",{}).get("product_id"),
+            "size": data.get("slots",{}).get("size"),
+            "color": data.get("slots",{}).get("color"),
+            "qty": data.get("slots",{}).get("qty",1) or 1,
+        })
+        return AgentResponse(action=data.get("action","CLARIFY"), slots=slots, clarify=data.get("clarify"))
+        
+    except Exception as e:
+        logging.error(f"❌ LLM call failed: {type(e).__name__}: {str(e)}")
+        # Return a fallback response instead of raising
+        if "timeout" in str(e).lower() or "connection" in str(e).lower():
+            logging.error("❌ Connection/timeout error in LLM call")
+            # Return a simple fallback that will trigger the fallback GPT response
+            return AgentResponse(action="CLARIFY", slots=Slots(product_id=None, size=None, color=None, qty=1), clarify="متاسفم، مشکل اتصال. لطفاً دوباره تلاش کنید.")
+        else:
+            logging.error(f"❌ Unexpected error in LLM call: {e}")
+            return AgentResponse(action="CLARIFY", slots=Slots(product_id=None, size=None, color=None, qty=1), clarify="متاسفم، خطا در پردازش. لطفاً دوباره تلاش کنید.") 
