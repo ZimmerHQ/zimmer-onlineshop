@@ -832,6 +832,12 @@ export default function ProductsPage() {
         <BulkImportModal
           isOpen={showBulkImport}
           onClose={() => setShowBulkImport(false)}
+          onImport={async (file: File) => {
+            // Handle bulk import logic here
+            // For now, just log the file and close the modal
+            console.log('Bulk import file:', file.name)
+            // TODO: Implement actual bulk import logic
+          }}
           onSuccess={() => {
             // Refresh products after successful import
             refetchProducts(1, 20, selectedCategory === 'all' ? undefined : parseInt(selectedCategory), searchQuery)
