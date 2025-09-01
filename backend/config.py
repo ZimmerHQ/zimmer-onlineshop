@@ -54,7 +54,7 @@ DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
 # File Upload
-MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10 * 1024 * 1024"))  # 10MB
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./static/uploads")
 
 # Print configuration summary (non-sensitive)
