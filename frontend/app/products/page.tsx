@@ -640,17 +640,17 @@ export default function ProductsPage() {
                             <span className={`font-medium ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {product.stock || 0}
                             </span>
-                            {product.low_stock && (
+                            {product.stock <= 5 && product.stock > 0 && (
                               <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
                                 کم‌موجودی
                               </span>
                             )}
                           </div>
                         </div>
-                        {product.low_stock_threshold && (
+                        {product.stock <= 5 && product.stock > 0 && (
                           <div className="flex justify-between text-xs text-gray-500">
                             <span>آستانه:</span>
-                            <span>{product.low_stock_threshold}</span>
+                            <span>5</span>
                           </div>
                         )}
                         {product.category_name && (
