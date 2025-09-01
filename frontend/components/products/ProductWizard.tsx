@@ -31,7 +31,7 @@ export default function ProductWizard({ isOpen, onClose, onSuccess }: ProductWiz
     available_sizes: '',
     available_colors: '',
     labels: '',
-    attributes: {} as Record<string, string>
+    attributes: {} as Record<string, string | string[]>
   })
   const [loading, setLoading] = useState(false)
   const [attributeKey, setAttributeKey] = useState('')
