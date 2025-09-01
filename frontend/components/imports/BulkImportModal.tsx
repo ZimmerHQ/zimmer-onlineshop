@@ -7,9 +7,10 @@ interface BulkImportModalProps {
   isOpen: boolean
   onClose: () => void
   onImport: (file: File) => Promise<void>
+  onSuccess?: () => void
 }
 
-export default function BulkImportModal({ isOpen, onClose, onImport }: BulkImportModalProps) {
+export default function BulkImportModal({ isOpen, onClose, onImport, onSuccess }: BulkImportModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +45,7 @@ export default function BulkImportModal({ isOpen, onClose, onImport }: BulkImpor
 
     try {
       await onImport(selectedFile)
+      onSuccess?.()
       onClose()
     } catch (error) {
       setError('خطا در آپلود فایل. لطفاً دوباره تلاش کنید')
