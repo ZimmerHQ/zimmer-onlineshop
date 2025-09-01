@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Product, ProductCreateRequest, ProductUpdateRequest } from '@/types/product';
 
-export interface Product {
+// Legacy Product interface for backward compatibility
+export interface LegacyProduct {
   id: number;
   code: string;
   name: string;
@@ -68,7 +70,7 @@ export function useProducts() {
     }
   };
 
-  const createProduct = async (productData: Partial<Product>): Promise<Product | null> => {
+  const createProduct = async (productData: ProductCreateRequest): Promise<Product | null> => {
     try {
       const response = await fetch(`${apiBase}/api/products/`, {
         method: 'POST',
@@ -90,7 +92,7 @@ export function useProducts() {
     }
   };
 
-  const updateProduct = async (id: number, productData: Partial<Product>): Promise<Product | null> => {
+  const updateProduct = async (id: number, productData: ProductUpdateRequest): Promise<Product | null> => {
     try {
       const response = await fetch(`${apiBase}/api/products/${id}`, {
         method: 'PUT',

@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { apiBase } from "./utils";
+import { Product, ProductCreateRequest, ProductUpdateRequest } from "@/types/product";
 
-// Product interface
-export interface Product {
+// Legacy Product interface for backward compatibility
+export interface LegacyProduct {
   id: string
   code: string
   name: string
@@ -77,9 +78,9 @@ interface DashboardState {
   loading: boolean;
   errors: string | null;
   fetchProducts: (query?: string, categoryId?: number) => Promise<void>;
-  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'code'>) => Promise<void>;
-  updateProduct: (id: string, product: Partial<Omit<Product, 'id' | 'createdAt' | 'code'>>) => Promise<{ success: boolean; data?: Product; error?: string }>;
-  deleteProduct: (id: string) => Promise<void>;
+  addProduct: (product: ProductCreateRequest) => Promise<void>;
+  updateProduct: (id: number, product: ProductUpdateRequest) => Promise<{ success: boolean; data?: Product; error?: string }>;
+  deleteProduct: (id: number) => Promise<void>;
   setProducts: (products: Product[]) => void;
   // Categories state
   categories: Category[];
@@ -156,9 +157,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         // Ensure data is an array and transform to match frontend interface
         const productsArray = Array.isArray(data) ? data.map((product: any) => ({
           ...product,
-          id: String(product.id), // Convert id to string
-          createdAt: new Date(product.created_at), // Convert created_at to createdAt
-          updatedAt: new Date(product.updated_at), // Convert updated_at to updatedAt
+          id: Number(product.id), // Convert id to number
+          createdAt: product.created_at || product.createdAt, // Keep as string
+          updatedAt: product.updated_at || product.updatedAt, // Keep as string
         })) : [];
         set({ products: productsArray, loading: false });
       } else {
@@ -169,73 +170,63 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       // Fallback to dummy data for demo purposes when API fails
       const dummyProducts: Product[] = [
         {
-          id: '1',
+          id: 1,
           code: 'A0001',
           name: 'کفش ورزشی نایک',
           description: 'کفش ورزشی با کیفیت بالا برای دویدن',
           price: 250000,
-          sizes: ['38', '39', '40', '41', '42'],
-          image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
           stock: 15,
           category_id: 1,
-          category_name: 'کفش',
+          image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
+          tags: ['ورزشی', 'نایک'],
+          labels: ['کفش', 'ورزشی'],
+          attributes: { size: ['38', '39', '40', '41', '42'] },
           is_active: true,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z'
         },
         {
-          id: '2',
+          id: 2,
           code: 'A0002',
           name: 'کفش رسمی مردانه',
           description: 'کفش رسمی مناسب برای مراسم و محل کار',
           price: 180000,
-          sizes: ['39', '40', '41', '42', '43'],
-          image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
           stock: 8,
           category_id: 1,
-          category_name: 'کفش',
+          image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
+          tags: ['رسمی', 'مردانه'],
+          labels: ['کفش', 'رسمی'],
+          attributes: { size: ['39', '40', '41', '42', '43'] },
           is_active: true,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z'
         },
         {
-          id: '3',
+          id: 3,
           code: 'A0003',
           name: 'کفش کتانی',
           description: 'کفش کتانی راحت برای پیاده‌روی روزانه',
           price: 120000,
-          sizes: ['36', '37', '38', '39', '40'],
-          image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
           stock: 22,
           category_id: 1,
-          category_name: 'کفش',
+          image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
+          tags: ['کتانی', 'پیاده‌روی'],
+          labels: ['کفش', 'کتانی'],
+          attributes: { size: ['36', '37', '38', '39', '40'] },
           is_active: true,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z'
         }
       ];
       set({ products: dummyProducts, loading: false, errors: 'Using demo data due to API connection issue' });
     }
   },
   
-  addProduct: async (productData) => {
+  addProduct: async (productData: ProductCreateRequest) => {
     set({ loading: true, errors: null });
     try {
-      // Ensure proper data types before sending
-      const cleanPayload = {
-        name: productData.name,
-        price: Number(productData.price),
-        stock: Number(productData.stock),
-        category_id: Number(productData.category_id),
-        description: productData.description || null,
-        image_url: productData.image_url || null,
-        thumbnail_url: productData.thumbnail_url || null,
-        sizes: productData.sizes || null,
-        available_sizes: productData.available_sizes || null,
-        available_colors: productData.available_colors || null,
-        tags: productData.tags || null,
-        is_active: true
-      };
+      // The payload is already properly typed and cleaned
+      const cleanPayload = productData;
 
       // Validate required fields
       if (!cleanPayload.name || !cleanPayload.price || !cleanPayload.stock || !cleanPayload.category_id) {
@@ -254,9 +245,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         // Transform the new product to match frontend interface
         const transformedProduct = {
           ...newProduct,
-          id: String(newProduct.id),
-          createdAt: new Date(newProduct.created_at),
-          updatedAt: new Date(newProduct.updated_at),
+          id: Number(newProduct.id),
+          createdAt: newProduct.created_at || newProduct.createdAt,
+          updatedAt: newProduct.updated_at || newProduct.updatedAt,
         };
         set(state => ({ 
           products: [...state.products, transformedProduct], 
@@ -276,7 +267,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
   
-  updateProduct: async (id, productData) => {
+  updateProduct: async (id: number, productData: ProductUpdateRequest) => {
     set({ loading: true, errors: null });
     try {
       const response = await fetch(`${apiBase}/api/products/${id}`, {
@@ -290,9 +281,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         // Transform the updated product to match frontend interface
         const transformedProduct = {
           ...updatedProduct,
-          id: String(updatedProduct.id),
-          createdAt: new Date(updatedProduct.created_at),
-          updatedAt: new Date(updatedProduct.updated_at),
+          id: Number(updatedProduct.id),
+          createdAt: updatedProduct.created_at || updatedProduct.createdAt,
+          updatedAt: updatedProduct.updated_at || updatedProduct.updatedAt,
         };
         set(state => ({
           products: state.products.map(p => p.id === id ? transformedProduct : p),
@@ -309,7 +300,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
   
-  deleteProduct: async (id) => {
+  deleteProduct: async (id: number) => {
     set({ loading: true, errors: null });
     try {
       const response = await fetch(`${apiBase}/api/products/${id}`, {

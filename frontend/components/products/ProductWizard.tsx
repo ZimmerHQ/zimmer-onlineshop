@@ -31,7 +31,7 @@ export default function ProductWizard({ isOpen, onClose, onSuccess }: ProductWiz
     available_sizes: '',
     available_colors: '',
     labels: '',
-    attributes: {} as Record<string, string | string[]>
+    attributes: {} as Record<string, string[]>
   })
   const [loading, setLoading] = useState(false)
   const [attributeKey, setAttributeKey] = useState('')
@@ -97,20 +97,36 @@ export default function ProductWizard({ isOpen, onClose, onSuccess }: ProductWiz
 
     setLoading(true)
     try {
-      await addProduct({
+      // Parse sizes and colors from UI inputs and build attributes
+      const sizesArray = productForm.available_sizes
+        ? productForm.available_sizes.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
+      const colorsArray = productForm.available_colors
+        ? productForm.available_colors.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
+
+      const attributes: Record<string, string[]> = {};
+      if (sizesArray.length) attributes.size = sizesArray;
+      if (colorsArray.length) attributes.color = colorsArray;
+
+      const labels = productForm.labels
+        ? productForm.labels.split(",").map(l => l.trim()).filter(Boolean)
+        : [];
+
+      const payload = {
         name: productForm.name,
-        description: productForm.description,
+        description: productForm.description || "",
         price: parseFloat(productForm.price),
         stock: parseInt(productForm.stock) || 0,
         category_id: selectedCategory.id,
-        image_url: productForm.image_url,
-        tags: productForm.tags,
-        sizes: [],
-        available_sizes: productForm.available_sizes ? productForm.available_sizes.split(',').map(s => s.trim()).filter(s => s) : [],
-        available_colors: productForm.available_colors ? productForm.available_colors.split(',').map(s => s.trim()).filter(s => s) : [],
-        labels: productForm.labels ? productForm.labels.split(',').map(l => l.trim()).filter(l => l) : [],
-        attributes: productForm.attributes
-      })
+        image_url: productForm.image_url || undefined,
+        tags: productForm.tags ? [productForm.tags] : [],
+        labels,
+        attributes: Object.keys(attributes).length ? attributes : undefined,
+        is_active: true,
+      };
+
+      await addProduct(payload)
       
       // Reset form
       setProductForm({
@@ -147,7 +163,9 @@ export default function ProductWizard({ isOpen, onClose, onSuccess }: ProductWiz
       image_url: '',
       tags: '',
       available_sizes: '',
-      available_colors: ''
+      available_colors: '',
+      labels: '',
+      attributes: {}
     })
     setNewCategoryName('')
     setShowCategoryModal(false)
