@@ -590,13 +590,13 @@ export default function ProductsPage() {
                           onClick={() => {
                             setProductForm({
                               name: product.name,
-                              description: product.description,
+                              description: product.description || '',
                               price: product.price.toString(),
                               stock: (product.stock || 0).toString(),
                               category_id: product.category_id.toString(),
                               sizes: product.sizes?.join(', ') || '',
-                              image_url: product.image_url,
-                              thumbnail_url: product.thumbnail_url
+                              image_url: product.image_url || '',
+                              thumbnail_url: product.thumbnail_url || ''
                             })
                             setShowProductModal(true)
                           }}
