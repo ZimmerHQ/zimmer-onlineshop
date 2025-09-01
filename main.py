@@ -3,7 +3,7 @@ import logging
 import os
 
 # Load configuration first
-from config import CORS_ORIGINS, IS_PRODUCTION, print_config_summary
+from backend.config import CORS_ORIGINS, IS_PRODUCTION, print_config_summary
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,12 +23,12 @@ if IS_PRODUCTION:
         raise
 
 # Create database tables
-from database import engine, Base
+from backend.database import engine, Base
 logger.info("📋 Creating database tables...")
 Base.metadata.create_all(bind=engine)
 logger.info("✅ Database tables created successfully")
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -131,7 +131,7 @@ app.include_router(faq_router, prefix="/api/faq", tags=["faq"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Add Next.js static files serving
-# app.mount("/_next", StaticFiles(directory="frontend/.next"), name="next_static")
+app.mount("/_next", StaticFiles(directory="frontend/.next"), name="next_static")
 
 # Add webhook management router
 from webhook_manager import router as webhook_router
@@ -204,15 +204,32 @@ except Exception as e:
     logging.error(f"❌ Error setting up scheduler: {e}")
 
 # Fallback route for SPA routing (must be last)
-# Temporarily commented out to fix API routing issues
-# @app.get("/{full_path:path}")
-# async def serve_frontend(full_path: str):
-#     # Don't handle API routes - let them pass through to their respective routers
-#     if full_path.startswith("api/"):
-#         raise HTTPException(status_code=404, detail="API endpoint not found")
-#     
-#     # For now, just return a simple message
-#     return {"status": "error", "message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    # Don't handle API routes - let them pass through to their respective routers
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
+    # Try to serve the frontend file
+    try:
+        from fastapi.responses import FileResponse
+        import os
+        
+        # Check if the file exists in the frontend out directory
+        frontend_path = f"frontend/out/{full_path}"
+        if os.path.exists(frontend_path):
+            return FileResponse(frontend_path)
+        
+        # If it's a directory or doesn't exist, serve index.html for SPA routing
+        index_path = "frontend/out/index.html"
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        
+        # Fallback to a simple message if frontend is not built
+        return {"status": "error", "message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
+        
+    except Exception as e:
+        return {"status": "error", "message": f"Error serving frontend: {str(e)}"}
 
 if __name__ == "__main__":
     import uvicorn

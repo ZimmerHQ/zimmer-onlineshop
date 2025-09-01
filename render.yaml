@@ -27,7 +27,7 @@ services:
           property: connectionString
 
 databases:
-  # PostgreSQL Database (FREE tier)
+  # PostgreSQL Database
   - name: zimmer-db
     databaseName: zimmer_prod
     plan: free
