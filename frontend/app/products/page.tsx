@@ -1,878 +1,842 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
-import { useDashboardStore, type Product } from '@/lib/store'
-import { cn, formatDate, formatPrice, apiBase } from '@/lib/utils'
+import { useDashboardStore } from '@/lib/store'
+import { Plus, Package, Filter, Edit, Trash2, Upload, X, RefreshCw, Search, Eye } from 'lucide-react'
+import ProductWizard from '@/components/products/ProductWizard'
+import BulkImportModal from '@/components/imports/BulkImportModal'
+import FiltersBar from '@/components/products/FiltersBar'
+import CategoriesInline from '@/components/products/CategoriesInline'
+import { useProducts } from '@/lib/hooks/useProducts'
+import { useCategories } from '@/lib/hooks/useCategories'
+// import { useDebounce } from '@/lib/hooks/useDebounce'
+import { apiBase } from '@/lib/utils'
 
-// Simple Toast Component
-const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000)
-    return () => clearTimeout(timer)
-  }, [onClose])
-
-  return (
-    <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
-      type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-    }`}>
-      <div className="flex items-center">
-        <span className="mr-2">{type === 'success' ? '✅' : '❌'}</span>
-        <span>{message}</span>
-        <button onClick={onClose} className="mr-2 text-white hover:text-gray-200">×</button>
-      </div>
-    </div>
-  )
+// URL sync utility function
+function setQuery(router: any, searchParams: URLSearchParams, patch: Record<string, string | null>) {
+  const params = new URLSearchParams(searchParams.toString())
+  Object.entries(patch).forEach(([k, v]) => {
+    if (v === null || v === "") params.delete(k)
+    else params.set(k, String(v))
+  })
+  router.replace(`?${params.toString()}`)
 }
-
-// Utility function to ensure image URLs are absolute
-const ensureAbsoluteUrl = (url: string): string => {
-  if (!url) return `${apiBase}/static/placeholder.svg`
-  
-  // If already absolute, return as is
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  
-  // If relative URL, make it absolute
-  if (url.startsWith('/')) {
-    return `${apiBase}${url}`
-  }
-  
-  // If just filename, assume it's in static/images
-      return `${apiBase}/static/images/${url}`
-}
-import { Plus, Edit, Trash2, Package, Loader2, Star, Eye, ShoppingCart } from 'lucide-react'
-
-// ImagePreview component with fallback handling
-const ImagePreview = ({ 
-  imageUrl, 
-  fallbackUrl, 
-  className 
-}: { 
-  imageUrl: string; 
-  fallbackUrl: string; 
-  className?: string;
-}) => {
-  const [imageSrc, setImageSrc] = useState<string>(ensureAbsoluteUrl(imageUrl));
-  const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    if (imageUrl) {
-      setImageSrc(ensureAbsoluteUrl(imageUrl));
-      setHasError(false);
-    }
-  }, [imageUrl]);
-
-  const handleError = () => {
-    if (!hasError && imageSrc !== ensureAbsoluteUrl(fallbackUrl)) {
-      console.warn("Thumbnail failed to load, falling back to original image");
-      setImageSrc(ensureAbsoluteUrl(fallbackUrl));
-      setHasError(true);
-    } else if (hasError) {
-      // Final fallback to local placeholder
-      console.warn("Both thumbnail and original image failed, using local placeholder");
-      setImageSrc(`${apiBase}/static/placeholder.svg`);
-    }
-  };
-
-  return (
-    <img
-      src={imageSrc}
-      alt="Preview"
-      className={className}
-      onError={handleError}
-    />
-  );
-};
-
-interface ProductFormData {
-  name: string
-  description: string
-  price: number
-  sizes: string
-  image_url: string
-  stock: number
-  imageFile?: File
-}
-
-interface ImageUploadResponse {
-  url?: string
-  thumbnail_url?: string
-  filename?: string
-  error?: string
-  message?: string
-}
-
-const sizeOptions = [
-  'XS', 'S', 'M', 'L', 'XL', 'XXL',
-  '32', '34', '36', '38', '40', '42', '44',
-  '6', '7', '8', '9', '10', '11', '12',
-  'One Size', 'Free Size'
-]
-
-// Sample dummy products data for fallback
-const dummyProducts: Product[] = [
-  {
-    id: '1',
-    name: 'پیراهن مردانه کلاسیک',
-    description: 'پیراهن مردانه با طراحی کلاسیک و کیفیت بالا، مناسب برای مناسبت‌های رسمی و روزمره',
-    price: 850000,
-    sizes: ['L', 'XL'],
-    image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
-  },
-  {
-    id: '2',
-    name: 'کفش ورزشی نایک',
-    description: 'کفش ورزشی با کفی نرم و طراحی مدرن، مناسب برای دویدن و ورزش‌های روزانه',
-    price: 1200000,
-    sizes: ['40', '41', '42', '43'],
-    image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-  },
-  {
-    id: '3',
-    name: 'کیف دستی چرمی',
-    description: 'کیف دستی چرمی با کیفیت بالا، دارای جیب‌های متعدد و طراحی شیک',
-    price: 950000,
-    sizes: ['One Size'],
-    image_url: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=400&fit=crop',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7), // 7 days ago
-  },
-  {
-    id: '4',
-    name: 'ساعت مچی لوکس',
-    description: 'ساعت مچی با طراحی لوکس و کیفیت سوئیسی، مناسب برای مناسبت‌های خاص',
-    price: 2500000,
-    sizes: ['Free Size'],
-    image_url: 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&h=400&fit=crop',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-  },
-  {
-    id: '5',
-    name: 'عینک آفتابی ریبن',
-    description: 'عینک آفتابی با لنزهای محافظ UV و فریم سبک، مناسب برای روزهای آفتابی',
-    price: 450000,
-    sizes: ['One Size'],
-    image_url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10), // 10 days ago
-  },
-  {
-    id: '6',
-    name: 'ژاکت پشمی زمستانی',
-    description: 'ژاکت پشمی گرم و نرم، مناسب برای فصل زمستان و هوای سرد',
-    price: 1800000,
-    sizes: ['S', 'M', 'L', 'XL'],
-    image_url: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=400&fit=crop',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1), // 1 day ago
-  },
-]
 
 export default function ProductsPage() {
-  // Hydration-safe state
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [isClient, setIsClient] = useState(false)
   
-  const { 
-    products, 
-    loading: isLoading,
-    errors: error,
-    fetchProducts,
-    addProduct, 
-    updateProduct, 
-    deleteProduct,
-    setProducts
-  } = useDashboardStore()
+  // Tab state - sync with URL
+  const [activeTab, setActiveTab] = useState<'products' | 'categories'>(
+    searchParams.get("tab") === "categories" ? "categories" : "products"
+  )
   
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isImageUploading, setIsImageUploading] = useState(false)
-  const [deletingProductId, setDeletingProductId] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  const [formData, setFormData] = useState<ProductFormData>({
+  // Modal states
+  const [showProductWizard, setShowProductWizard] = useState(false)
+  const [showProductModal, setShowProductModal] = useState(false)
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  
+  // Onboarding state
+  const [categoriesExist, setCategoriesExist] = useState<boolean | null>(null)
+  
+  // Search and filter state - separate input and applied query
+  const [searchInput, setSearchInput] = useState(
+    searchParams.get("q") || ''
+  )
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get("q") || ''
+  )
+  
+  // Category filter - sync with URL
+  const [selectedCategory, setSelectedCategory] = useState(
+    searchParams.get("category_id") || 'all'
+  )
+  
+  // Remove automatic search - only search when button is clicked
+  // const debouncedSearchQuery = useDebounce(searchInput, 500)
+  
+  // Form states
+  const [productForm, setProductForm] = useState({
     name: '',
     description: '',
-    price: 0,
+    price: '',
+    stock: '',
+    category_id: '',
     sizes: '',
     image_url: '',
-    stock: 0,
-    imageFile: undefined,
+    thumbnail_url: ''
   })
 
-  // Handle hydration
+  // Image upload states
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Use new hooks for data fetching
+  const { products, totalCount, loading: isLoading, error: productsError, refetch: refetchProducts } = useProducts()
+  const { categories, loading: categoriesLoading, error: categoriesError, refetch: refetchCategories } = useCategories()
+  
+  const { 
+    addProduct,
+    deleteProduct
+  } = useDashboardStore()
+
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  // Load products from backend on component mount (only on client)
   useEffect(() => {
     if (isClient) {
-      console.log('🔄 ProductsPage: Component mounted, fetching products...')
-      fetchProducts().catch((error) => {
-        console.warn('⚠️ ProductsPage: API failed, loading dummy data for testing:', error)
-        // Load dummy data for testing if API fails
-        setProducts(dummyProducts)
-      })
+      // Check if categories exist for onboarding
+      checkCategoriesExist()
+      
+      // Check for category preselection from URL
+      const categoryFromUrl = searchParams.get('category_id')
+      if (categoryFromUrl) {
+        setSelectedCategory(categoryFromUrl)
+        setProductForm(prev => ({ ...prev, category_id: categoryFromUrl }))
+      }
     }
-  }, [isClient]) // Removed fetchProducts and setProducts from dependencies to prevent loops
-
-  // Debug logging for products state changes
+  }, [isClient, searchParams])
+  
+  // Sync tab state with URL
   useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab === "categories" || tab === "products") {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
+  
+  // Sync category filter with URL
+  useEffect(() => {
+    const categoryFromUrl = searchParams.get("category_id")
+    if (categoryFromUrl) {
+      setSelectedCategory(categoryFromUrl)
+    } else {
+      setSelectedCategory('all')
+    }
+  }, [searchParams])
+  
+  // Remove automatic search effect - only search when button is clicked
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     setSearchQuery(searchInput)
+  //   }, 500)
+  //   
+  //   return () => clearTimeout(timer)
+  // }, [searchInput])
+  
+  useEffect(() => {
+    // Refetch products when debounced search or category changes
     if (isClient) {
-      console.log('📦 ProductsPage: Products state updated:', {
-        count: products.length,
-        products: products,
-        isLoading,
-        error
-      })
+      const categoryId = selectedCategory && selectedCategory !== 'all' ? parseInt(selectedCategory) : undefined
+      refetchProducts(1, 20, categoryId, searchQuery)
     }
-  }, [products, isLoading, error, isClient])
+  }, [searchQuery, selectedCategory, isClient])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Client-side validation
-    if (!formData.name.trim()) {
-      alert('نام محصول الزامی است')
-      return
-    }
-    if (!formData.description.trim()) {
-      alert('توضیحات محصول الزامی است')
-      return
-    }
-    if (formData.price <= 0) {
-      alert('قیمت باید بیشتر از صفر باشد')
-      return
-    }
-    if (!formData.sizes.trim()) {
-      alert('سایز محصول الزامی است')
-      return
-    }
-    if (!formData.imageFile && !formData.image_url.trim()) {
-      alert('تصویر محصول الزامی است')
-      return
-    }
-    
-    setIsSubmitting(true)
-    setIsImageUploading(false)
-    
+  const checkCategoriesExist = async () => {
     try {
-      let finalImageUrl = formData.image_url.trim()
-      let uploadResult = null
-      
-      // If there's a new image file, upload it first
-      if (formData.imageFile) {
-        console.log('📤 Uploading image file:', formData.imageFile.name)
-        setIsImageUploading(true)
-        
-        try {
-          uploadResult = await uploadImage(formData.imageFile)
-          console.log("Upload result:", uploadResult);
-          // Use thumbnail_url if available, otherwise fallback to url
-          finalImageUrl = uploadResult.thumbnail_url || uploadResult.url
-          console.log('✅ Upload successful:', finalImageUrl)
-          if (uploadResult.thumbnail_url) {
-            console.log('📱 Using thumbnail URL for product display')
-          } else {
-            console.log('🖼️ Using full-size URL (no thumbnail available)')
-          }
-        } catch (uploadError) {
-          console.log('❌ Upload failed:', uploadError instanceof Error ? uploadError.message : 'خطای نامشخص')
-          setToast({ message: `خطا در آپلود تصویر: ${uploadError instanceof Error ? uploadError.message : 'خطای نامشخص'}`, type: 'error' })
-          return
-        } finally {
-          setIsImageUploading(false)
-        }
-      } else if (editingProduct && !formData.imageFile) {
-        // If editing and no new image, keep the original image URL
-        finalImageUrl = editingProduct.image_url
-        console.log('🔄 ProductsPage: Keeping original image URL for edit:', finalImageUrl)
-      }
-      
-      // Transform form data to match API format
-      const productData = {
-        name: formData.name.trim(),
-        description: formData.description.trim(),
-        price: Number(formData.price),
-        sizes: formData.sizes.split(',').map(s => s.trim()).filter(s => s.length > 0),
-        image_url: finalImageUrl,
-        thumbnail_url: uploadResult?.thumbnail_url || undefined,
-        stock: Number(formData.stock)
-      }
-      
-      console.log('💾 ProductsPage: Saving product with uploaded image:', productData)
-      
-      if (editingProduct) {
-        console.log('✏️ ProductsPage: Updating existing product:', editingProduct.id)
-        try {
-          const result = await updateProduct(editingProduct.id, productData)
-          if (result.success) {
-            setToast({ message: 'محصول با موفقیت بروزرسانی شد', type: 'success' })
-            handleCloseModal()
-          } else {
-            setToast({ message: 'خطا در بروزرسانی محصول', type: 'error' })
-          }
-        } catch (updateError) {
-          console.error('❌ ProductsPage: Update failed:', updateError)
-          const errorMessage = updateError instanceof Error ? updateError.message : 'خطا در بروزرسانی محصول'
-          setToast({ message: `خطا در بروزرسانی محصول: ${errorMessage}`, type: 'error' })
-        }
-      } else {
-        console.log('📝 ProductsPage: Creating new product, current count:', products.length)
-        await addProduct(productData)
-        console.log('📝 ProductsPage: Product created, new count:', products.length)
-        setToast({ message: 'محصول جدید با موفقیت اضافه شد', type: 'success' })
-        handleCloseModal()
+      const response = await fetch(`${apiBase}/api/categories/exists`)
+      if (response.ok) {
+        const data = await response.json()
+        setCategoriesExist(data.exists)
       }
     } catch (error) {
-      console.error('❌ ProductsPage: Error saving product:', error)
-      const errorMessage = error instanceof Error ? error.message : 'خطای نامشخص'
-      setToast({ message: `خطا در ذخیره محصول: ${errorMessage}`, type: 'error' })
-    } finally {
-      setIsSubmitting(false)
-      setIsImageUploading(false)
+      console.error('Error checking categories:', error)
+      setCategoriesExist(false)
     }
   }
 
-  const handleEdit = (product: Product) => {
-    console.log('✏️ ProductsPage: Editing product:', product)
-    setEditingProduct(product)
-    setFormData({
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      sizes: product.sizes.join(', '),
-      image_url: product.image_url,
-      stock: product.stock || 0,
-      imageFile: undefined,
-    })
-    setIsModalOpen(true)
-  }
-
-  const handleDelete = async (id: string) => {
-    if (confirm('آیا مطمئن هستید که می‌خواهید این محصول را حذف کنید؟')) {
-      console.log('🗑️ ProductsPage: Deleting product:', id)
-      setDeletingProductId(id)
-      try {
-        await deleteProduct(id)
-      } catch (error) {
-        console.error('❌ ProductsPage: Error deleting product:', error)
-      } finally {
-        setDeletingProductId(null)
-      }
-    }
-  }
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false)
-    setEditingProduct(null)
-    setFormData({
-      name: '',
-      description: '',
-      price: 0,
-      sizes: '',
-      image_url: '',
-      stock: 0,
-      imageFile: undefined,
-    })
-  }
-
-  // Function to upload image to FastAPI backend
-  const uploadImage = async (file: File): Promise<{ url: string; thumbnail_url?: string }> => {
-    console.log('📤 Uploading image file:', file.name)
+  // Category drill-down function
+  const goToProductsWithCategory = useCallback((categoryId: number) => {
+    // Switch tab, set category_id, reset page to 1
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("tab", "products")
+    params.set("category_id", String(categoryId))
+    params.delete("page") // Reset pagination
+    router.replace(`?${params.toString()}`)
     
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    try {
-      const response = await fetch(`${apiBase}/upload-image`, {
-        method: 'POST',
-        body: formData,
-      })
-      
-      const data: ImageUploadResponse = await response.json()
-      console.log('🖼️ Image upload response:', data)
-      
-      // Check if response is successful and URL exists
-      if (response.ok && data.url) {
-        // Prefer thumbnail_url if available, fallback to url
-        const imageUrl = data.thumbnail_url || data.url
-        console.log('✅ Upload successful:', imageUrl)
-        return { 
-          url: data.url, 
-          thumbnail_url: data.thumbnail_url 
-        }
-      } else {
-        // Only throw error if response is not ok or URL is missing
-        const errorMessage = data.error || data.message || 'خطا در آپلود تصویر'
-        console.log('❌ Upload failed:', errorMessage)
-        throw new Error(errorMessage)
-      }
-    } catch (error) {
-      console.error('❌ Upload failed:', error)
-      throw new Error(error instanceof Error ? error.message : 'خطا در آپلود تصویر')
-    }
+    // Optional: scroll into view
+    setTimeout(() => {
+      const el = document.getElementById("products-section")
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 0)
+  }, [router, searchParams])
+
+  const handleFiltersChange = (filters: any) => {
+    // Update search and category filters
+    setSearchInput(filters.search || '')
+    setSearchQuery(filters.search || '')
+    setSelectedCategory(filters.category || 'all')
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleSearch = () => {
+    setSearchQuery(searchInput)
+    setQuery(router, searchParams, { q: searchInput || null, page: "1" })
+  }
+
+  const handleClearSearch = () => {
+    setSearchInput('')
+    setSearchQuery('')
+    setQuery(router, searchParams, { q: null, page: "1" })
+  }
+
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
     if (file) {
-      console.log('🖼️ Image selected:', file.name, file.size, file.type)
-      setFormData({ ...formData, imageFile: file })
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('لطفاً یک فایل تصویری انتخاب کنید')
+        return
+      }
       
-      // Create a preview URL for the image
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('حجم فایل نباید بیشتر از 5 مگابایت باشد')
+        return
+      }
+
+      setSelectedImage(file)
+      
+      // Create preview
       const reader = new FileReader()
       reader.onload = (e) => {
-        setFormData(prev => ({ ...prev, image_url: e.target?.result as string }))
+        setImagePreview(e.target?.result as string)
       }
       reader.readAsDataURL(file)
     }
   }
 
-  // Show loading state during SSR/hydration
-  if (!isClient) {
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    try {
+      const response = await fetch('http://localhost:8000/upload-image', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        throw new Error('Upload failed')
+      }
+      
+      const data = await response.json()
+      return data.url
+    } catch (error) {
+      console.error('Upload error:', error)
+      // Fallback: use a placeholder image
+      return 'https://via.placeholder.com/300x300?text=Product+Image'
+    }
+  }
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Validate required fields
+    if (!productForm.name.trim()) {
+      alert('لطفاً نام محصول را وارد کنید');
+      return;
+    }
+    if (!productForm.price || parseFloat(productForm.price) <= 0) {
+      alert('لطفاً قیمت معتبر وارد کنید');
+      return;
+    }
+    if (!productForm.stock || parseInt(productForm.stock) < 0) {
+      alert('لطفاً موجودی معتبر وارد کنید');
+      return;
+    }
+    if (!productForm.category_id) {
+      alert('لطفاً دسته‌بندی را انتخاب کنید');
+      return;
+    }
+    
+    setUploading(true)
+    
+    try {
+      let imageUrl = productForm.image_url
+      
+      // Upload image if selected
+      if (selectedImage) {
+        imageUrl = await uploadImage(selectedImage)
+      }
+      
+      // Process sizes field safely - backend expects array of strings
+      let processedSizes = null;
+      if (productForm.sizes && productForm.sizes.trim()) {
+        const sizesArray = productForm.sizes.split(',').map(s => s.trim()).filter(s => s);
+        processedSizes = sizesArray.length > 0 ? sizesArray : null;
+      }
+      
+      const productData = {
+        name: productForm.name,
+        description: productForm.description,
+        price: parseFloat(productForm.price) || 0,
+        stock: parseInt(productForm.stock) || 0,
+        category_id: parseInt(productForm.category_id) || 0,
+        sizes: processedSizes || [],
+        image_url: imageUrl || productForm.image_url,
+        thumbnail_url: productForm.thumbnail_url || imageUrl,
+        category_name: '', // Will be set by backend
+        is_active: true
+      };
+      
+      console.log('Sending product data:', productData);
+      
+      await addProduct(productData)
+      
+      setShowProductModal(false)
+      setProductForm({
+        name: '',
+        description: '',
+        price: '',
+        stock: '',
+        category_id: '',
+        sizes: '',
+        image_url: '',
+        thumbnail_url: ''
+      })
+      removeImage()
+      alert('محصول با موفقیت اضافه شد!')
+      refetchProducts()
+    } catch (error) {
+      console.error('Error adding product:', error)
+      console.error('Error type:', typeof error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
+      
+      let errorMessage = 'خطا در افزودن محصول'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'object' && error !== null) {
+        errorMessage = JSON.stringify(error)
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      }
+      
+      alert(errorMessage)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteProduct = async (id: string) => {
+    if (confirm('آیا مطمئن هستید که می‌خواهید این محصول را حذف کنید؟')) {
+      try {
+        await deleteProduct(id)
+        alert('محصول با موفقیت حذف شد!')
+        refetchProducts()
+      } catch (error) {
+        console.error('Error deleting product:', error)
+        alert('خطا در حذف محصول')
+      }
+    }
+  }
+
+  const handleAddProductFromCategory = (categoryId: number) => {
+    setSelectedCategory(categoryId.toString())
+    setProductForm(prev => ({ ...prev, category_id: categoryId.toString() }))
+    setShowProductModal(true)
+    setActiveTab('products')
+  }
+
+  const handleCategoryChange = () => {
+    refetchCategories()
+    refetchProducts()
+  }
+
+  // Onboarding guard
+  if (categoriesExist === false) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          <span className="mr-3 text-gray-500">در حال بارگذاری...</span>
+        <div className="p-6">
+          <div className="max-w-md mx-auto text-center py-12">
+            <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">اول دسته‌بندی بسازید</h2>
+            <div className="text-gray-600 mb-6">
+              برای شروع کار با محصولات، ابتدا باید حداقل یک دسته‌بندی ایجاد کنید.
+            </div>
+            <button
+              onClick={() => setActiveTab('categories')}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4 ml-2" />
+              افزودن دسته‌بندی
+            </button>
+          </div>
         </div>
       </DashboardLayout>
     )
   }
 
-  // Debug info display
-  const debugInfo = (
-    <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-      <h3 className="font-semibold text-yellow-800 mb-2">🔍 Debug Info:</h3>
-      <div className="text-sm text-yellow-700 space-y-1">
-        <p>• Client rendered: {isClient ? '✅ Yes' : '❌ No'}</p>
-        <p>• Products count: {products.length}</p>
-        <p>• Loading state: {isLoading ? '🔄 Loading' : '✅ Ready'}</p>
-        <p>• Error state: {error ? `❌ ${error}` : '✅ No errors'}</p>
-        <p>• API URL: {apiBase}/api/products</p>
-        {error && error.includes('demo data') && (
-          <div className="mt-2 p-2 bg-orange-100 border border-orange-300 rounded">
-            <p className="text-orange-800 text-xs">
-              <strong>⚠️ Demo Mode:</strong> Using sample data due to API connection issues. 
-              This is normal during development or when the backend is offline.
-            </p>
+  if (!isClient || isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="mt-2 text-gray-600">در حال بارگذاری...</div>
           </div>
-        )}
-      </div>
-      {products.length > 0 && (
-        <div className="mt-2">
-          <p className="text-sm font-medium text-yellow-800">Sample product structure:</p>
-          <pre className="text-xs bg-yellow-100 p-2 rounded mt-1 overflow-auto">
-            {JSON.stringify(products[0], null, 2)}
-          </pre>
         </div>
-      )}
-    </div>
-  )
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
-      {/* Toast Notifications */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-      
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">مدیریت محصولات</h1>
-            <p className="text-gray-600 mt-1">کاتالوگ محصولات خود را مدیریت کنید</p>
+            <h1 className="text-2xl font-bold text-gray-900">مدیریت محصولات و دسته‌بندی‌ها</h1>
+            <div className="text-gray-600 mt-1">کاتالوگ محصولات و دسته‌بندی‌های خود را مدیریت کنید</div>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Plus className="h-4 w-4 ml-2" />
-            افزودن محصول
-          </button>
-        </div>
-
-        {/* Debug Info */}
-        {debugInfo}
-        
-        {/* Manual API Test Button */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="font-semibold text-blue-800 mb-2">🧪 Manual API Test:</h3>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => {
-                console.log('🧪 Manual API test triggered')
-                fetchProducts()
-              }}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-            >
-              Test API Call
-            </button>
-            <button
-              onClick={async () => {
-                console.log('🧪 Direct fetch test to API')
-                try {
-                  const response = await fetch(`${apiBase}/api/products`)
-                  const data = await response.json()
-                  console.log('🧪 Direct API response:', { status: response.status, data })
-                  alert(`API Status: ${response.status}\nData: ${JSON.stringify(data, null, 2)}`)
-                } catch (error) {
-                  console.error('🧪 Direct API error:', error)
-                  alert(`API Error: ${error}`)
-                }
-              }}
-              className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700"
-            >
-              Direct API Test
-            </button>
-            <button
-              onClick={() => {
-                console.log('🧪 Loading dummy data')
-                setProducts(dummyProducts)
-              }}
-              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700"
-            >
-              Load Dummy Data
-            </button>
-            <button
-              onClick={() => {
-                console.log('🧪 Clearing products')
-                setProducts([])
-              }}
-              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700"
-            >
-              Clear Products
-            </button>
-            <button
-              onClick={() => {
-                console.log('🧪 Force refresh products')
-                fetchProducts()
-              }}
-              className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-md hover:bg-orange-700"
-            >
-              Force Refresh
-            </button>
+          <div className="flex space-x-3 space-x-reverse">
+            {activeTab === 'products' && (
+              <>
+                <button 
+                  onClick={() => setShowBulkImport(true)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50"
+                >
+                  <Upload className="h-4 w-4 ml-2" />
+                  درون‌ریزی گروهی
+                </button>
+                <button 
+                  onClick={() => setShowProductModal(true)}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4 ml-2" />
+                  افزودن محصول
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Package className="h-8 w-8 text-blue-600" />
-              </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">کل محصولات</p>
-                <p className="text-2xl font-semibold text-gray-900">{products.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Eye className="h-8 w-8 text-green-600" />
-              </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">بازدید امروز</p>
-                <p className="text-2xl font-semibold text-gray-900">1,234</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ShoppingCart className="h-8 w-8 text-purple-600" />
-              </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">فروش امروز</p>
-                <p className="text-2xl font-semibold text-gray-900">45</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Star className="h-8 w-8 text-yellow-600" />
-              </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">امتیاز متوسط</p>
-                <p className="text-2xl font-semibold text-gray-900">4.8</p>
-              </div>
-            </div>
-          </div>
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => {
+                setActiveTab('products')
+                setQuery(router, searchParams, { tab: "products" })
+              }}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'products'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Package className="h-4 w-4 inline ml-2" />
+              محصولات
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('categories')
+                setQuery(router, searchParams, { tab: "categories" })
+              }}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'categories'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Filter className="h-4 w-4 inline ml-2" />
+              دسته‌بندی‌ها
+            </button>
+          </nav>
         </div>
 
-        {/* Products Grid */}
-        {isLoading && products.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            <span className="mr-3 text-gray-500">در حال بارگذاری محصولات...</span>
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <p className="text-red-500 mb-2">خطا در بارگذاری محصولات</p>
-              <p className="text-sm text-gray-500">{error}</p>
-              <button
-                onClick={() => fetchProducts()}
-                className="mt-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-              >
-                تلاش مجدد
-              </button>
-            </div>
-          </div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-12">
-            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">هیچ محصولی یافت نشد</h3>
-            <p className="text-gray-500 mb-4">هنوز محصولی اضافه نکرده‌اید</p>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4 ml-2" />
-              افزودن اولین محصول
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.isArray(products) && products.map((product) => (
-            <div key={product.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              <div className="aspect-square bg-gray-100 relative group">
-                {/* Stock badge */}
-                {typeof product.stock === 'number' && (
-                  <span
-                    className={
-                      'absolute top-2 right-2 px-2 py-1 text-xs rounded font-bold ' +
-                      (product.stock === 0
-                        ? 'bg-red-500 text-white'
-                        : product.stock <= 5
-                        ? 'bg-orange-400 text-white'
-                        : 'bg-gray-200 text-gray-700')
-                    }
-                  >
-                    {product.stock === 0
-                      ? 'ناموجود'
-                      : product.stock <= 5
-                      ? 'موجودی کم'
-                      : `موجودی: ${product.stock}`}
-                  </span>
-                )}
-                <img
-                  src={product.thumbnail_url ? ensureAbsoluteUrl(product.thumbnail_url) : ensureAbsoluteUrl(product.image_url)}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    // Prevent infinite loops by nullifying onerror after first failure
-                    if (e.currentTarget.src !== 'https://via.placeholder.com/400x400?text=تصویر+موجود+نیست') {
-                      console.warn('⚠️ ProductsPage: Image failed to load:', product.thumbnail_url || product.image_url)
-                      e.currentTarget.onerror = null // Prevent infinite loops
-                      e.currentTarget.src = 'https://via.placeholder.com/400x400?text=تصویر+موجود+نیست'
-                    }
+        {/* Content */}
+        {activeTab === 'products' ? (
+          <div id="products-section" className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">محصولات</h2>
+            
+            {/* Category Filter Chip */}
+            {selectedCategory !== 'all' && (
+              <div className="mb-4 flex items-center gap-2 text-sm">
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                  دسته‌بندی فعال: {categories?.find(c => c.id.toString() === selectedCategory)?.name}
+                </span>
+                <button
+                  type="button"
+                  className="text-red-600 underline hover:text-red-700"
+                  onClick={() => {
+                    setSelectedCategory('all')
+                    setQuery(router, searchParams, { category_id: null, page: "1" })
                   }}
-                />
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-2">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="p-2 bg-white rounded-full shadow-lg hover:bg-gray-50 transition-colors"
-                      title="ویرایش محصول"
-                    >
-                      <Edit className="h-4 w-4 text-gray-700" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(product.id)}
-                      disabled={deletingProductId === product.id}
-                      className="p-2 bg-white rounded-full shadow-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-                      title="حذف محصول"
-                    >
-                      {deletingProductId === product.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-gray-700" />
-                      ) : (
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      )}
-                    </button>
-                  </div>
-                </div>
+                >
+                  نمایش همه
+                </button>
               </div>
-              <div className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 truncate">
-                      {product.name}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                      {product.description}
-                    </p>
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-lg font-bold text-gray-900">
-                        {formatPrice(product.price)}
-                      </span>
-                      <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {Array.isArray(product.sizes) ? product.sizes.join(', ') : product.sizes}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex items-center space-x-1">
-                        <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                        <span className="text-sm text-gray-600">4.8</span>
-                        <span className="text-xs text-gray-400">(124)</span>
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        اضافه شده {formatDate(product.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add/Edit Product Modal */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                {editingProduct ? 'ویرایش محصول' : 'افزودن محصول جدید'}
-              </h2>
-              
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    نام محصول
-                  </label>
+            )}
+            
+            {/* Enhanced Search Bar */}
+            <div className="mb-6">
+              <div className="flex items-center space-x-3 space-x-reverse">
+                <div className="flex-1 relative">
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleSearch()
+                      }
+                    }}
+                    placeholder="جستجو در محصولات..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    توضیحات
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    required
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      قیمت (تومان)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                      required
-                      min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      سایزها (با کاما جدا کنید)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.sizes}
-                      onChange={(e) => setFormData({ ...formData, sizes: e.target.value })}
-                      placeholder="مثال: 38, 39, 40 یا L, XL"
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                {/* Stock input */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    موجودی
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: Number(e.target.value) })}
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    تصویر محصول
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  {formData.image_url && (
-                    <div className="mt-2">
-                      <ImagePreview 
-                        imageUrl={formData.image_url}
-                        fallbackUrl={editingProduct ? editingProduct.image_url : formData.image_url}
-                        className="w-20 h-20 object-cover rounded border border-gray-200"
-                      />
-                      {formData.imageFile && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          فایل انتخاب شده: {formData.imageFile.name} 
-                          ({Math.round(formData.imageFile.size / 1024)} KB)
-                        </p>
-                      )}
-                      {isImageUploading && (
-                        <div className="flex items-center mt-1">
-                          <Loader2 className="h-3 w-3 animate-spin text-blue-500 ml-1" />
-                          <span className="text-xs text-blue-500">در حال آپلود تصویر...</span>
+                <button
+                  onClick={handleSearch}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                >
+                  جستجو
+                </button>
+                <button
+                  onClick={handleClearSearch}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50"
+                >
+                  پاک کردن
+                </button>
+              </div>
+              
+              {/* Category Filter */}
+              <div className="mt-3">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    const newCategory = e.target.value
+                    setSelectedCategory(newCategory)
+                    setQuery(router, searchParams, { 
+                      category_id: newCategory === 'all' ? null : newCategory,
+                      page: "1" 
+                    })
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">همه دسته‌بندی‌ها</option>
+                  {categories?.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            {/* Results Summary */}
+            <div className="text-sm text-gray-600 mb-4">
+              {totalCount > 0 ? (
+                <div>تعداد کل محصولات: {totalCount}</div>
+              ) : (
+                <div>هیچ محصولی یافت نشد</div>
+              )}
+            </div>
+            
+            {products.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">هیچ محصولی یافت نشد</h3>
+                <div className="text-gray-500 mb-4">هنوز محصولی اضافه نکرده‌اید</div>
+                <button
+                  onClick={() => setShowProductModal(true)}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4 ml-2" />
+                  افزودن اولین محصول
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {products.map((product) => (
+                  <div key={product.id} className="border border-gray-200 rounded-lg p-4">
+                    {/* Product Thumbnail */}
+                    <div className="mb-3">
+                      {product.thumbnail_url || product.image_url ? (
+                        <img
+                          src={product.thumbnail_url || product.image_url}
+                          alt={product.name}
+                          className="w-full h-32 object-cover rounded-lg border"
+                          onError={(e) => {
+                            e.currentTarget.src = '/placeholder.svg';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-32 bg-gray-200 rounded-lg flex items-center justify-center">
+                          <Package className="h-12 w-12 text-gray-400" />
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-                
-                <div className="flex items-center justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                  >
-                    انصراف
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || isImageUploading}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {isImageUploading ? 'در حال آپلود تصویر...' : 
-                     isSubmitting ? 'در حال ذخیره...' : 
-                     (editingProduct ? 'ویرایش' : 'افزودن')}
-                  </button>
-                </div>
-              </form>
+                    
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-medium text-gray-900">{product.name}</h3>
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => {
+                            setProductForm({
+                              name: product.name,
+                              description: product.description,
+                              price: product.price.toString(),
+                              stock: (product.stock || 0).toString(),
+                              category_id: product.category_id.toString(),
+                              sizes: product.sizes?.join(', ') || '',
+                              image_url: product.image_url,
+                              thumbnail_url: product.thumbnail_url
+                            })
+                            setShowProductModal(true)
+                          }}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(product.id)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm text-gray-500">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-mono text-lg font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                          {product.code}
+                        </span>
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          product.is_active 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {product.is_active ? 'فعال' : 'غیرفعال'}
+                        </span>
+                      </div>
+                      
+                      {product.description && <div className="text-gray-600 mb-2">{product.description}</div>}
+                      
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span>قیمت:</span>
+                          <span className="font-medium">{new Intl.NumberFormat('fa-IR').format(product.price)} تومان</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>موجودی:</span>
+                          <div className="flex items-center space-x-2 space-x-reverse">
+                            <span className={`font-medium ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {product.stock || 0}
+                            </span>
+                            {product.low_stock && (
+                              <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
+                                کم‌موجودی
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {product.low_stock_threshold && (
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>آستانه:</span>
+                            <span>{product.low_stock_threshold}</span>
+                          </div>
+                        )}
+                        {product.category_name && (
+                          <div className="flex justify-between">
+                            <span>دسته‌بندی:</span>
+                            <span className="text-blue-600">{product.category_name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <CategoriesInline 
+            onAddProduct={handleAddProductFromCategory}
+            onCategoryChange={handleCategoryChange}
+            onViewCategory={goToProductsWithCategory}
+          />
+        )}
+
+        {/* Product Modal */}
+        {showProductModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">افزودن محصول جدید</h3>
+                <form onSubmit={handleAddProduct}>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">نام محصول</label>
+                    <input
+                      type="text"
+                      value={productForm.name}
+                      onChange={(e) => setProductForm({...productForm, name: e.target.value})}
+                      placeholder="نام محصول"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">توضیحات</label>
+                    <textarea
+                      value={productForm.description}
+                      onChange={(e) => setProductForm({...productForm, description: e.target.value})}
+                      placeholder="توضیحات محصول"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">قیمت (تومان)</label>
+                    <input
+                      type="number"
+                      value={productForm.price}
+                      onChange={(e) => setProductForm({...productForm, price: e.target.value})}
+                      placeholder="0"
+                      min="0"
+                      step="0.01"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">موجودی</label>
+                    <input
+                      type="number"
+                      value={productForm.stock}
+                      onChange={(e) => setProductForm({...productForm, stock: e.target.value})}
+                      placeholder="0"
+                      min="0"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">دسته‌بندی</label>
+                    <select
+                      value={productForm.category_id}
+                      onChange={(e) => setProductForm({...productForm, category_id: e.target.value})}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">انتخاب کنید</option>
+                      {categories?.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">سایزها (جدا شده با کاما)</label>
+                    <input
+                      type="text"
+                      value={productForm.sizes}
+                      onChange={(e) => setProductForm({...productForm, sizes: e.target.value})}
+                      placeholder="S, M, L, XL"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">تصویر اصلی (URL)</label>
+                    <input
+                      type="url"
+                      value={productForm.image_url}
+                      onChange={(e) => setProductForm({...productForm, image_url: e.target.value})}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">تصویر کوچک (URL)</label>
+                    <input
+                      type="url"
+                      value={productForm.thumbnail_url}
+                      onChange={(e) => setProductForm({...productForm, thumbnail_url: e.target.value})}
+                      placeholder="https://example.com/thumbnail.jpg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">
+                      تصویر کوچک برای نمایش در لیست محصولات (اختیاری)
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">آپلود تصویر</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {imagePreview && (
+                      <div className="mt-2">
+                        <img src={imagePreview} alt="Preview" className="w-20 h-20 object-cover rounded" />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="mt-1 text-sm text-red-600 hover:text-red-700"
+                        >
+                          حذف تصویر
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center justify-end space-x-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowProductModal(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    >
+                      انصراف
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={uploading}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {uploading ? 'در حال آپلود...' : 'افزودن'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Bulk Import Modal */}
+        <BulkImportModal
+          isOpen={showBulkImport}
+          onClose={() => setShowBulkImport(false)}
+          onSuccess={() => {
+            // Refresh products after successful import
+            refetchProducts(1, 20, selectedCategory === 'all' ? undefined : parseInt(selectedCategory), searchQuery)
+          }}
+        />
       </div>
     </DashboardLayout>
   )

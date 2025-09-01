@@ -13,19 +13,21 @@ import {
   Bot,
   Home,
   Users,
-  BarChart3
+  BarChart3,
+  Hash,
+  HelpCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Messages', href: '/conversations', icon: MessageSquare },
+  { name: 'Conversations', href: '/conversations', icon: MessageSquare },
   { name: 'Chatbot', href: '/dashboard/chat', icon: MessageCircle },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
   { name: 'Support', href: '/support', icon: Headphones },
-  { name: 'Telegram Bot', href: '/webhook', icon: Bot },
+  { name: 'FAQ', href: '/faq', icon: HelpCircle },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]

@@ -7,18 +7,18 @@ import { formatDate, formatPrice } from '@/lib/utils';
 import { Package, Eye, Trash2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 const statusColors = {
+  draft: 'bg-gray-100 text-gray-800 border-gray-200',
   pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
-  shipped: 'bg-purple-100 text-purple-800 border-purple-200',
-  delivered: 'bg-green-100 text-green-800 border-green-200',
+  approved: 'bg-blue-100 text-blue-800 border-blue-200',
+  sold: 'bg-green-100 text-green-800 border-green-200',
   cancelled: 'bg-red-100 text-red-800 border-red-200',
 };
 
 const statusLabels = {
-  pending: 'در انتظار',
-  confirmed: 'تأیید شده',
-  shipped: 'ارسال شده',
-  delivered: 'تحویل داده شده',
+  draft: 'پیش‌نویس',
+  pending: 'در انتظار تأیید',
+  approved: 'تأیید شده',
+  sold: 'فروخته شد',
   cancelled: 'لغو شده',
 };
 
@@ -52,6 +52,35 @@ export default function OrdersPage() {
       await updateOrder(orderId, { status: newStatus as any });
     } catch (error) {
       console.error('Error updating order status:', error);
+    }
+  };
+
+  const handleApproveOrder = async (orderId: string) => {
+    try {
+      await updateOrder(orderId, { status: 'approved' as any });
+    } catch (error) {
+      console.error('Error approving order:', error);
+    }
+  };
+
+  const handleMarkAsSold = async (orderId: string) => {
+    try {
+      await updateOrder(orderId, { status: 'sold' as any });
+      // Show success message for inventory update
+      alert('سفارش به عنوان فروخته شده علامت‌گذاری شد و موجودی به‌روز شد');
+    } catch (error) {
+      console.error('Error marking order as sold:', error);
+      alert('خطا در به‌روزرسانی موجودی. لطفاً دوباره تلاش کنید.');
+    }
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (confirm('آیا مطمئن هستید که می‌خواهید این سفارش را لغو کنید؟')) {
+      try {
+        await updateOrder(orderId, { status: 'cancelled' as any });
+      } catch (error) {
+        console.error('Error cancelling order:', error);
+      }
     }
   };
 
@@ -132,6 +161,22 @@ export default function OrdersPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
+                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <div className="h-3 w-3 bg-blue-600 rounded-full"></div>
+                </div>
+              </div>
+              <div className="mr-4">
+                <p className="text-sm font-medium text-gray-500">تأیید شده</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {Array.isArray(orders) ? orders.filter(o => o.status === 'approved').length : 0}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
                 <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
                   <div className="h-3 w-3 bg-purple-600 rounded-full"></div>
                 </div>
@@ -153,9 +198,9 @@ export default function OrdersPage() {
                 </div>
               </div>
               <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">تکمیل شده</p>
+                <p className="text-sm font-medium text-gray-500">فروخته شده</p>
                 <p className="text-2xl font-semibold text-gray-900">
-                  {Array.isArray(orders) ? orders.filter(o => o.status === 'delivered').length : 0}
+                  {Array.isArray(orders) ? orders.filter(o => o.status === 'sold').length : 0}
                 </p>
               </div>
             </div>
@@ -233,17 +278,9 @@ export default function OrdersPage() {
                         {formatPrice(order.final_amount)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={order.status}
-                          onChange={(e) => handleStatusUpdate(order.id.toString(), e.target.value)}
-                          className={`px-2 py-1 text-xs font-medium rounded-full border ${statusColors[order.status]}`}
-                        >
-                          <option value="pending">در انتظار</option>
-                          <option value="confirmed">تأیید شده</option>
-                          <option value="shipped">ارسال شده</option>
-                          <option value="delivered">تحویل داده شده</option>
-                          <option value="cancelled">لغو شده</option>
-                        </select>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[order.status]}`}>
+                          {statusLabels[order.status]}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(new Date(order.created_at))}
@@ -257,6 +294,70 @@ export default function OrdersPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
+                          
+                          {/* Status-specific actions */}
+                          {order.status === 'draft' && (
+                            <button
+                              onClick={() => handleStatusUpdate(order.id.toString(), 'pending')}
+                              className="text-yellow-600 hover:text-yellow-900 px-2 py-1 text-xs rounded border border-yellow-300 hover:bg-yellow-50"
+                              title="تأیید سفارش"
+                            >
+                              تأیید
+                            </button>
+                          )}
+                          
+                          {order.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => handleApproveOrder(order.id.toString())}
+                                className="text-blue-600 hover:text-blue-900 px-2 py-1 text-xs rounded border border-blue-300 hover:bg-blue-50"
+                                title="تأیید ادمین"
+                              >
+                                تأیید ادمین
+                              </button>
+                              <button
+                                onClick={() => handleCancelOrder(order.id.toString())}
+                                className="text-red-600 hover:text-red-900 px-2 py-1 text-xs rounded border border-red-300 hover:bg-red-50"
+                                title="لغو سفارش"
+                              >
+                                لغو
+                              </button>
+                            </>
+                          )}
+                          
+                          {order.status === 'approved' && (
+                            <>
+                              <button
+                                onClick={() => handleMarkAsSold(order.id.toString())}
+                                className="text-green-600 hover:text-green-900 px-2 py-1 text-xs rounded border border-green-300 hover:bg-green-50"
+                                title="علامت‌گذاری به عنوان فروخته شده (کاهش موجودی)"
+                              >
+                                فروخته شد
+                              </button>
+                              <button
+                                onClick={() => handleCancelOrder(order.id.toString())}
+                                className="text-red-600 hover:text-red-900 px-2 py-1 text-xs rounded border border-red-300 hover:bg-red-50"
+                                title="لغو سفارش"
+                              >
+                                لغو
+                              </button>
+                            </>
+                          )}
+                          
+                          {order.status === 'sold' && (
+                            <button
+                              onClick={() => handleCancelOrder(order.id.toString())}
+                              className="text-red-600 hover:text-red-900 px-2 py-1 text-xs rounded border border-red-300 hover:bg-red-50"
+                              title="لغو سفارش (بازگردانی موجودی)"
+                            >
+                              لغو
+                            </button>
+                          )}
+                          
+                          {order.status === 'cancelled' && (
+                            <span className="text-gray-400 text-xs">لغو شده</span>
+                          )}
+                          
                           <button
                             onClick={() => handleDeleteOrder(order.id.toString())}
                             className="text-red-600 hover:text-red-900"

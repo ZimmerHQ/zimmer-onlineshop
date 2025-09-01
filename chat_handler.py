@@ -5,11 +5,13 @@ from services.chat.state import ConversationState, Slots, merge_slots, find_by_i
 from services.chat.ner import extract_slots
 from services.chat.agent import call_llm
 from gpt_service import ask_gpt
-from product_handler import search_products_by_name
 from order_handler import create_simple_order
 from database import get_db
 from app_logging.chat_log import log_message
 from sqlalchemy.orm import Session
+from utils.normalization import extract_product_code, extract_attributes_from_query
+from services.product_service import search_products_by_name
+from models import Product
 import logging
 import os
 
@@ -69,8 +71,8 @@ def _render_list_and_store(state: ConversationState, products, prefix: str = "")
             product_id=int(getattr(p, "id", i)),
             name=str(getattr(p, "name", "محصول")),
             price=float(getattr(p, "price", 0.0)),
-            sizes=[str(s) for s in getattr(p, "sizes", [])] if hasattr(p,"sizes") else None,
-            colors=[str(c) for c in getattr(p, "colors", [])] if hasattr(p,"colors") else None,
+            sizes=[str(s) for s in (getattr(p, "sizes") or []) if s is not None and s != ""],
+            colors=[str(c) for c in (getattr(p, "colors") or []) if c is not None and c != ""],
         )
         state.last_list.append(li)
         sizes = ",".join(li.sizes or [])
@@ -128,7 +130,7 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
         # If user explicitly asked for a list, do a search using last_query or fallback keyword
         if _looks_like_list_request(user_text):
             q = state.last_query or "جدید"
-            products = search_products_by_name(db, q) or []
+            products = search_products(db, q=q) or []
             resp = _render_list_and_store(state, products)
             
             # Log assistant reply
@@ -147,6 +149,50 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
         # 3) Handle actions
         if action == "SEARCH_PRODUCTS":
             q = state.last_query or user_text or "محصول"
+            
+            # Check if query contains a product code (highest priority)
+            detected_code = extract_product_code(user_text)
+            if detected_code:
+                # Code-first search: try to find exact product by code
+                products = search_products(db, code=detected_code) or []
+                if products:
+                    # Found exact match by code
+                    product = products[0]
+                    state.slots.product_id = int(getattr(product, "id", 1))
+                    
+                    # Check if we need more details (size, color, quantity)
+                    need = missing_fields(state.slots)
+                    if "size" in need or "color" in need:
+                        resp = ChatResponse(
+                            reply=f"🎯 محصول {detected_code} پیدا شد!\n\n📦 {product.name}\n💰 قیمت: {product.price:,.0f} تومان\n\n📏 لطفاً سایز و رنگ مورد نظرتان را بفرستید (مثلاً: 43 مشکی).", 
+                            slots=state.slots
+                        )
+                        try:
+                            log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="COLLECT_VARIANTS", slots=state.slots.model_dump())
+                        except Exception as e:
+                            print("⚠️ failed to log assistant message:", repr(e))
+                        return resp
+                    
+                    # Product found, show summary
+                    resp = ChatResponse(reply=f"{_summary(state)}\n\n✅ آیا این سفارش را تایید می‌کنید؟", slots=state.slots)
+                    try:
+                        log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="CONFIRM_ORDER", slots=state.slots)
+                    except Exception as e:
+                        print("⚠️ failed to log assistant message:", repr(e))
+                    return resp
+                else:
+                    # Code not found
+                    resp = ChatResponse(
+                        reply=f"❌ محصول با کد {detected_code} یافت نشد.\n\n🔍 آیا کد را درست نوشته‌اید؟ یا می‌خواهید محصولات مشابه را ببینید؟", 
+                        slots=state.slots
+                    )
+                    try:
+                        log_message(db, req.conversation_id, role="assistant", text=resp.reply, intent="PRODUCT_NOT_FOUND", slots=state.slots.model_dump())
+                    except Exception as e:
+                        print("⚠️ failed to log assistant message:", repr(e))
+                    return resp
+            
+            # No code detected, do attribute-aware search
             products = search_products_by_name(db, q) or []
 
             # Try direct match by name
@@ -178,8 +224,8 @@ async def chat_endpoint(req: ChatRequest, raw: Request, db: Session = Depends(ge
                              product_id=int(getattr(only, "id", 1)),
                              name=str(getattr(only, "name", "محصول")),
                              price=float(getattr(only, "price", 0.0)),
-                             sizes=[str(s) for s in getattr(only, "sizes", [])] if hasattr(only,"sizes") else None,
-                             colors=[str(c) for c in getattr(only, "colors", [])] if hasattr(only,"colors") else None)
+                             sizes=[str(s) for s in (getattr(only, "available_sizes") or []) if s is not None and s != ""],
+                             colors=[str(c) for c in (getattr(only, "available_colors") or []) if c is not None and c != ""])
                 ]
                 state.slots.product_id = int(getattr(only, "id", 1))
                 need = missing_fields(state.slots)

@@ -1,62 +1,93 @@
 # main.py
 import logging
-from env import assert_openai_key  # makes sure .env is loaded and key exists
+import os
 
+# Load configuration first
+from config import CORS_ORIGINS, IS_PRODUCTION, print_config_summary
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Validate early (comment this if you want to run without key)
-try:
-    assert_openai_key()
-except Exception as e:
-    # Optional: don't crash here; just log. If you want hard fail, re-raise.
-    logging.warning(f"Startup warning: {e}")
+# Print configuration summary
+print_config_summary()
+
+# Validate OpenAI API key in production
+if IS_PRODUCTION:
+    try:
+        from env import assert_openai_key
+        assert_openai_key()
+        logger.info("✅ OpenAI API key validated")
+    except Exception as e:
+        logger.error(f"❌ OpenAI API key validation failed: {e}")
+        raise
 
 # Create database tables
-from database import engine
-from models import Base
-print("📋 Creating database tables...")
+from database import engine, Base
+logger.info("📋 Creating database tables...")
 Base.metadata.create_all(bind=engine)
-print("✅ Database tables created successfully")
+logger.info("✅ Database tables created successfully")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import os
 
 # Create FastAPI app instance
-app = FastAPI()
+app = FastAPI(
+    title="Zimmer Backend API",
+    description="Backend API for Zimmer e-commerce platform",
+    version="1.0.0"
+)
 
-# Add CORS middleware to allow requests from any origin (for demo purposes)
+# Add CORS middleware with dynamic origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+import uuid
+from fastapi.responses import JSONResponse
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    logging.info(f"⬅️ {request.method} {request.url}")
+    # Generate unique request ID
+    request_id = str(uuid.uuid4())
+    request.headers.__dict__["_list"].append((b"x-request-id", request_id.encode()))
+    
+    logging.info(f"⬅️ [{request_id}] {request.method} {request.url}")
     try:
         response = await call_next(request)
+        logging.info(f"➡️ [{request_id}] Response status: {response.status_code}")
+        return response
     except Exception as e:
-        logging.error(f"🔥 Error while handling {request.url}: {repr(e)}")
-        raise
-    logging.info(f"➡️ Response status: {response.status_code}")
-    return response
+        logging.error(f"🔥 [{request_id}] Error while handling {request.url}: {repr(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "internal_error", "request_id": request_id}
+        )
 
 # Import your routers AFTER creating the app
-from chat_handler import router as chat_router
+from routers.chat import router as chat_router
 app.include_router(chat_router)
 
 # Add other routers as needed
-from product_handler import router as product_router
-app.include_router(product_router, prefix="/api/products")
+from routers.products import router as products_router
+app.include_router(products_router, prefix="/api/products", tags=["products"])
 
-from order_handler import router as order_router
-app.include_router(order_router)
+from routers.orders import router as orders_router
+app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
+
+# Remove duplicate product_handler router since we're using routers.products
+# from product_handler import router as product_router
+# app.include_router(product_router, prefix="/api/products")
+
+# Remove duplicate order_handler router since we're using routers.orders
+# from order_handler import router as order_router
+# app.include_router(order_router)
 
 from upload_handler import router as upload_router
 app.include_router(upload_router)
@@ -64,11 +95,43 @@ app.include_router(upload_router)
 from conversations_handler import router as conversations_router
 app.include_router(conversations_router)
 
+from routers.imports import router as imports_router
+app.include_router(imports_router, prefix="/api/imports")
+
+from routers.categories import router as categories_router
+app.include_router(categories_router, prefix="/api/categories")
+
+# Add health router
+from routers.health import router as health_router
+app.include_router(health_router, prefix="/api")
+
+# Add Telegram router
+from routers.telegram import router as telegram_router
+app.include_router(telegram_router, prefix="/api/telegram", tags=["telegram"])
+
+# Add Analytics router
+from routers.analytics import router as analytics_router
+app.include_router(analytics_router, prefix="/api/analytics", tags=["analytics"])
+
+# Add Integrations router
+from routers.integrations import router as integrations_router
+app.include_router(integrations_router, prefix="/api/integrations", tags=["integrations"])
+
+
+
+# Add Conversations router
+from routers.conversations import router as conversations_router_new
+app.include_router(conversations_router_new, prefix="/api/conversations", tags=["conversations"])
+
+# Add FAQ router
+from routers.faq import router as faq_router
+app.include_router(faq_router, prefix="/api/faq", tags=["faq"])
+
 # Add static files serving
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Add Next.js static files serving
-app.mount("/_next", StaticFiles(directory="frontend/.next"), name="next_static")
+# app.mount("/_next", StaticFiles(directory="frontend/.next"), name="next_static")
 
 # Add webhook management router
 from webhook_manager import router as webhook_router
@@ -78,95 +141,78 @@ app.include_router(webhook_router)
 from telegram_webhook import app as telegram_app
 app.mount("/telegram", telegram_app)
 
-@app.get("/api/health")
-def health():
-    try:
-        # Test database connection
-        from database import get_db
-        from sqlalchemy.orm import Session
-        from sqlalchemy import text
-        
-        db = next(get_db())
-        result = db.execute(text("SELECT 1"))
-        db.close()
-        
-        return {
-            "status": "healthy", 
-            "message": "Backend API is running",
-            "database": "connected"
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy", 
-            "message": f"Server error: {str(e)}",
-            "database": "error"
-        }
+# Add direct webhook endpoint for easier access
+@app.post("/api/telegram/webhook")
+async def telegram_webhook_direct(request: Request):
+    """Direct Telegram webhook endpoint."""
+    from telegram_webhook import telegram_webhook
+    from database import get_db
+    db = next(get_db())
+    return await telegram_webhook(request, db)
+
+# Setup APScheduler for automated reports
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from services.reports_service import ReportsService
+    from database import get_db
+    
+    scheduler = BackgroundScheduler()
+    
+    def generate_weekly_report():
+        """Generate weekly report every Monday at 00:10"""
+        try:
+            db = next(get_db())
+            reports_service = ReportsService(db)
+            reports_service.generate_report("weekly")
+            logging.info("✅ Weekly report generated successfully")
+        except Exception as e:
+            logging.error(f"❌ Error generating weekly report: {e}")
+    
+    def generate_monthly_report():
+        """Generate monthly report on 1st day at 00:15"""
+        try:
+            db = next(get_db())
+            reports_service = ReportsService(db)
+            reports_service.generate_report("monthly")
+            logging.info("✅ Monthly report generated successfully")
+        except Exception as e:
+            logging.error(f"❌ Error generating monthly report: {e}")
+    
+    # Schedule jobs
+    scheduler.add_job(
+        generate_weekly_report,
+        CronTrigger(day_of_week='mon', hour=0, minute=10),
+        id='weekly_report',
+        name='Generate Weekly Sales Report'
+    )
+    
+    scheduler.add_job(
+        generate_monthly_report,
+        CronTrigger(day=1, hour=0, minute=15),
+        id='monthly_report',
+        name='Generate Monthly Sales Report'
+    )
+    
+    # Start scheduler
+    scheduler.start()
+    logging.info("🚀 APScheduler started for automated reports")
+    
+except ImportError:
+    logging.warning("⚠️ APScheduler not available. Automated reports disabled.")
+except Exception as e:
+    logging.error(f"❌ Error setting up scheduler: {e}")
 
 # Fallback route for SPA routing (must be last)
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    # Don't handle API routes
-    if full_path.startswith("api/"):
-        return {"status": "error", "message": "API endpoint not found"}
-    
-    # Debug logging
-    print(f"🔍 Serving frontend for path: '{full_path}'")
-    
-    # Check for Next.js static files first
-    static_file = os.path.join("frontend/.next/static", full_path)
-    if os.path.exists(static_file) and os.path.isfile(static_file):
-        print(f"✅ Serving static file: {static_file}")
-        return FileResponse(static_file)
-    
-    # Check for Next.js build output in app directory with .html extension
-    next_build_file = os.path.join("frontend/.next/server/app", f"{full_path}.html")
-    if os.path.exists(next_build_file) and os.path.isfile(next_build_file):
-        print(f"✅ Serving HTML file: {next_build_file}")
-        return FileResponse(next_build_file, media_type="text/html")
-    
-    # Check for Next.js build output in app directory without extension
-    next_build_file_no_ext = os.path.join("frontend/.next/server/app", full_path)
-    if os.path.exists(next_build_file_no_ext) and os.path.isfile(next_build_file_no_ext):
-        print(f"✅ Serving file without extension: {next_build_file_no_ext}")
-        return FileResponse(next_build_file_no_ext)
-    
-    # Check for pages directory (legacy)
-    next_pages_file = os.path.join("frontend/.next/server/pages", full_path)
-    if os.path.exists(next_pages_file) and os.path.isfile(next_pages_file):
-        print(f"✅ Serving pages file: {next_pages_file}")
-        return FileResponse(next_pages_file, media_type="text/html")
-    
-    # Serve index.html for root path
-    if full_path == "" or full_path == "/":
-        index_path = os.path.join("frontend/.next/server/app", "index.html")
-        if os.path.exists(index_path):
-            print(f"✅ Serving index.html: {index_path}")
-            return FileResponse(index_path, media_type="text/html")
-        else:
-            print(f"❌ index.html not found at: {index_path}")
-    
-    # Fallback to pages index
-    pages_index_path = os.path.join("frontend/.next/server/pages", "index.html")
-    if os.path.exists(pages_index_path):
-        print(f"✅ Serving pages index.html: {pages_index_path}")
-        return FileResponse(pages_index_path, media_type="text/html")
-    
-    # Debug: List what we found
-    print(f"❌ No frontend file found for path: '{full_path}'")
-    print(f"📂 Checking if frontend/.next exists: {os.path.exists('frontend/.next')}")
-    if os.path.exists('frontend/.next'):
-        print(f"📂 Checking if frontend/.next/server exists: {os.path.exists('frontend/.next/server')}")
-        if os.path.exists('frontend/.next/server'):
-            print(f"📂 Checking if frontend/.next/server/app exists: {os.path.exists('frontend/.next/server/app')}")
-            if os.path.exists('frontend/.next/server/app'):
-                try:
-                    app_files = os.listdir('frontend/.next/server/app')
-                    print(f"📄 Files in app directory: {app_files}")
-                except Exception as e:
-                    print(f"❌ Error listing app directory: {e}")
-    
-    # If no frontend build exists, return a helpful message
-    return {"status": "error", "message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
+# Temporarily commented out to fix API routing issues
+# @app.get("/{full_path:path}")
+# async def serve_frontend(full_path: str):
+#     # Don't handle API routes - let them pass through to their respective routers
+#     if full_path.startswith("api/"):
+#         raise HTTPException(status_code=404, detail="API endpoint not found")
+#     
+#     # For now, just return a simple message
+#     return {"status": "error", "message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
 
 if __name__ == "__main__":
     import uvicorn

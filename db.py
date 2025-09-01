@@ -7,9 +7,8 @@ def normalize_database_url(url: str) -> str:
         path = url.replace("sqlite:///", "", 1)
         p = Path(path)
         if not p.is_absolute():
-            # Make absolute relative to the project root (folder that contains backend/)
-            root = Path(__file__).resolve().parents[1]
-            abs_path = (root / p).resolve()
+            # Make absolute relative to the current working directory (backend/)
+            abs_path = Path.cwd() / p
             return f"sqlite:///{abs_path.as_posix()}"
     return url
 

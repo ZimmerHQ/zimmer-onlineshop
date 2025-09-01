@@ -1,15 +1,21 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useDashboardStore } from '@/lib/store';
 import { formatDate } from '@/lib/utils';
 import { MessageCircle, User, Bot, Loader2, AlertCircle, RefreshCw, Eye, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import UsersList from '@/components/conversations/UsersList';
 
 export default function ConversationsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [isClient, setIsClient] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('messages');
   
   const { 
     conversations, 
@@ -29,6 +35,23 @@ export default function ConversationsPage() {
       fetchConversations();
     }
   }, [fetchConversations, isClient]);
+
+  // Sync tab with URL
+  useEffect(() => {
+    const tab = searchParams.get('tab') || 'messages';
+    setActiveTab(tab);
+  }, [searchParams]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const params = new URLSearchParams(searchParams);
+    if (value === 'messages') {
+      params.delete('tab');
+    } else {
+      params.set('tab', value);
+    }
+    router.push(`/conversations?${params.toString()}`);
+  };
 
   const handleDeleteConversation = async (conversationId: string) => {
     if (confirm('آیا مطمئن هستید که می‌خواهید این گفتگو را حذف کنید؟')) {
@@ -64,155 +87,179 @@ export default function ConversationsPage() {
             <h1 className="text-2xl font-bold text-gray-900">گفتگوهای مشتریان</h1>
             <p className="text-gray-600 mt-1">مشاهده تمام گفتگوهای مشتریان با ربات</p>
           </div>
-          <button
-            onClick={() => fetchConversations()}
-            disabled={isLoading}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
-            بروزرسانی
-          </button>
+          {activeTab === 'messages' && (
+            <button
+              onClick={() => fetchConversations()}
+              disabled={isLoading}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
+              بروزرسانی
+            </button>
+          )}
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <MessageCircle className="h-8 w-8 text-blue-600" />
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="messages" className="flex items-center space-x-2 space-x-reverse">
+              <MessageCircle className="h-4 w-4" />
+              <span>پیام‌ها</span>
+            </TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center space-x-2 space-x-reverse">
+              <User className="h-4 w-4" />
+              <span>کاربران</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Messages Tab */}
+          <TabsContent value="messages" className="space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <MessageCircle className="h-8 w-8 text-blue-600" />
+                  </div>
+                  <div className="mr-4">
+                    <p className="text-sm font-medium text-gray-500">کل گفتگوها</p>
+                    <p className="text-2xl font-semibold text-gray-900">{Array.isArray(conversations) ? conversations.length : 0}</p>
+                  </div>
+                </div>
               </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">کل گفتگوها</p>
-                <p className="text-2xl font-semibold text-gray-900">{Array.isArray(conversations) ? conversations.length : 0}</p>
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <User className="h-8 w-8 text-green-600" />
+                  </div>
+                  <div className="mr-4">
+                    <p className="text-sm font-medium text-gray-500">کاربران فعال</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {Array.isArray(conversations) ? new Set(conversations.map(c => c.userId)).size : 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Bot className="h-8 w-8 text-purple-600" />
+                  </div>
+                  <div className="mr-4">
+                    <p className="text-sm font-medium text-gray-500">پیام‌های امروز</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {Array.isArray(conversations) ? conversations.filter(c => {
+                        const today = new Date();
+                        const convDate = new Date(c.lastMessageTime);
+                        return convDate.toDateString() === today.toDateString();
+                      }).length : 0}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <User className="h-8 w-8 text-green-600" />
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <AlertCircle className="h-5 w-5 text-red-600 ml-2" />
+                  <p className="text-red-800">{error}</p>
+                </div>
               </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">کاربران فعال</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {Array.isArray(conversations) ? new Set(conversations.map(c => c.userId)).size : 0}
-                </p>
-              </div>
-            </div>
-          </div>
+            )}
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Bot className="h-8 w-8 text-purple-600" />
-              </div>
-              <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">پیام‌های امروز</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {Array.isArray(conversations) ? conversations.filter(c => {
-                    const today = new Date();
-                    const convDate = new Date(c.lastMessageTime);
-                    return convDate.toDateString() === today.toDateString();
-                  }).length : 0}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-red-600 ml-2" />
-              <p className="text-red-800">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Conversations Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    کاربر
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    آخرین پیام
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    تعداد پیام‌ها
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    تاریخ آخرین پیام
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    عملیات
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-blue-600 ml-2" />
-                        <span className="text-gray-600">در حال بارگذاری گفتگوها...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : !Array.isArray(conversations) || conversations.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                      هیچ گفتگویی یافت نشد
-                    </td>
-                  </tr>
-                ) : Array.isArray(conversations) ? (
-                  conversations.map((conversation) => (
-                    <tr key={conversation.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        <div className="flex items-center">
-                          <User className="h-5 w-5 text-gray-400 ml-2" />
-                          {conversation.userId}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
-                        {conversation.lastMessage}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
-                        {conversation.messages?.length || 0}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(new Date(conversation.lastMessageTime))}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-2 space-x-reverse">
-                          <button
-                            onClick={() => handleViewDetails(conversation)}
-                            className="text-blue-600 hover:text-blue-900"
-                            title="مشاهده جزئیات"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteConversation(conversation.id)}
-                            className="text-red-600 hover:text-red-900"
-                            title="حذف گفتگو"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+            {/* Conversations Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        کاربر
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        آخرین پیام
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        تعداد پیام‌ها
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        تاریخ آخرین پیام
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        عملیات
+                      </th>
                     </tr>
-                  ))
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center">
+                            <Loader2 className="h-6 w-6 animate-spin text-blue-600 ml-2" />
+                            <span className="text-gray-600">در حال بارگذاری گفتگوها...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : !Array.isArray(conversations) || conversations.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                          هیچ گفتگویی یافت نشد
+                        </td>
+                      </tr>
+                    ) : Array.isArray(conversations) ? (
+                      conversations.map((conversation) => (
+                        <tr key={conversation.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <div className="flex items-center">
+                              <User className="h-5 w-5 text-gray-400 ml-2" />
+                              {conversation.userId}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
+                            {conversation.lastMessage}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
+                            {conversation.messages?.length || 0}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(new Date(conversation.lastMessageTime))}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex items-center space-x-2 space-x-reverse">
+                              <button
+                                onClick={() => handleViewDetails(conversation)}
+                                className="text-blue-600 hover:text-blue-900"
+                                title="مشاهده جزئیات"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteConversation(conversation.id)}
+                                className="text-red-600 hover:text-red-900"
+                                title="حذف گفتگو"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users">
+            <UsersList />
+          </TabsContent>
+        </Tabs>
 
         {/* Conversation Details Modal */}
         {isModalOpen && selectedConversation && (

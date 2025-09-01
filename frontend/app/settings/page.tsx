@@ -1,9 +1,14 @@
 'use client'
 
-import { useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import { useDashboardStore, type Theme, type Language } from '@/lib/store'
-import { Settings, Shield, Bell, Palette, Database, Sun, Moon, Globe, Check } from 'lucide-react'
+import { Settings, Shield, Bell, Palette, Database, Sun, Moon, Globe, Check, Bot, Eye, EyeOff } from 'lucide-react'
+import { integrationsApi, type TelegramConfig, type TelegramConfigRequest } from '@/lib/api/integrations'
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { toast } from 'sonner'
 
 // Translations
 const translations = {
@@ -166,6 +171,82 @@ export default function SettingsPage() {
     html.dir = language === 'fa' ? 'rtl' : 'ltr'
   }, [language])
 
+  // Telegram integrations state
+  const [telegramConfig, setTelegramConfig] = useState<TelegramConfig | null>(null)
+  const [telegramForm, setTelegramForm] = useState<TelegramConfigRequest>({
+    bot_token: '',
+    webhook_url: '',
+    secret: ''
+  })
+  const [showToken, setShowToken] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [isSettingWebhook, setIsSettingWebhook] = useState(false)
+
+  // Load Telegram configuration
+  useEffect(() => {
+    loadTelegramConfig()
+  }, [])
+
+  const loadTelegramConfig = async () => {
+    try {
+      const config = await integrationsApi.getTelegramConfig()
+      setTelegramConfig(config)
+      setTelegramForm({
+        bot_token: config.bot_token_exists ? '••••••••••••••••••••••••••••••••' : '',
+        webhook_url: config.webhook_url || '',
+        secret: config.secret_exists ? '••••••••••••••••••••••••••••••••' : ''
+      })
+    } catch (error) {
+      console.error('Failed to load Telegram config:', error)
+    }
+  }
+
+  const handleSaveTelegramConfig = async () => {
+    setIsLoading(true)
+    try {
+      await integrationsApi.updateTelegramConfig(telegramForm)
+      toast.success('تنظیمات تلگرام با موفقیت ذخیره شد')
+      await loadTelegramConfig()
+    } catch (error) {
+      toast.error('خطا در ذخیره تنظیمات تلگرام')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleTestConnection = async () => {
+    setIsTesting(true)
+    try {
+      const result = await integrationsApi.testTelegramConnection()
+      if (result.ok) {
+        toast.success(`اتصال موفق: ${result.info?.bot_name} (@${result.info?.username})`)
+      } else {
+        toast.error('خطا در اتصال به تلگرام')
+      }
+    } catch (error) {
+      toast.error('خطا در تست اتصال')
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const handleSetWebhook = async () => {
+    setIsSettingWebhook(true)
+    try {
+      const result = await integrationsApi.setTelegramWebhook()
+      if (result.ok) {
+        toast.success('Webhook با موفقیت تنظیم شد')
+      } else {
+        toast.error('خطا در تنظیم Webhook')
+      }
+    } catch (error) {
+      toast.error('خطا در تنظیم Webhook')
+    } finally {
+      setIsSettingWebhook(false)
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -275,6 +356,92 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* Telegram Integrations */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Bot className="h-5 w-5 ml-2" />
+              تنظیمات ربات تلگرام
+            </CardTitle>
+            <CardDescription>
+              پیکربندی توکن ربات، آدرس Webhook و تست اتصال
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Bot Token */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">توکن ربات</label>
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <Input
+                  type={showToken ? "text" : "password"}
+                  value={telegramForm.bot_token}
+                  onChange={(e) => setTelegramForm({...telegramForm, bot_token: e.target.value})}
+                  placeholder="توکن ربات تلگرام"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowToken(!showToken)}
+                  className="px-3"
+                >
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            {/* Webhook URL */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">آدرس Webhook</label>
+              <Input
+                type="url"
+                value={telegramForm.webhook_url}
+                onChange={(e) => setTelegramForm({...telegramForm, webhook_url: e.target.value})}
+                placeholder="https://yourdomain.com/api/telegram/webhook"
+              />
+            </div>
+
+            {/* Secret */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">کلید امنیتی (اختیاری)</label>
+              <Input
+                type="password"
+                value={telegramForm.secret}
+                onChange={(e) => setTelegramForm({...telegramForm, secret: e.target.value})}
+                placeholder="کلید امنیتی برای تایید Webhook"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-3 space-x-reverse pt-2">
+              <Button
+                onClick={handleSaveTelegramConfig}
+                disabled={isLoading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isLoading ? 'در حال ذخیره...' : 'ذخیره تنظیمات'}
+              </Button>
+              
+              <Button
+                onClick={handleTestConnection}
+                disabled={isTesting || !telegramForm.bot_token}
+                variant="outline"
+              >
+                {isTesting ? 'در حال تست...' : 'تست اتصال'}
+              </Button>
+              
+              <Button
+                onClick={handleSetWebhook}
+                disabled={isSettingWebhook || !telegramForm.bot_token || !telegramForm.webhook_url}
+                variant="outline"
+              >
+                {isSettingWebhook ? 'در حال تنظیم...' : 'تنظیم Webhook'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Settings Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

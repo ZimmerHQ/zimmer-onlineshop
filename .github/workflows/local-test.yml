@@ -1,0 +1,49 @@
+name: Local E2E Test Suite
+
+on:
+  workflow_dispatch:  # Manual trigger only
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/local-test.yml'
+
+jobs:
+  test-local:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Python dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        
+    - name: Start backend server
+      run: |
+        cd backend
+        python -m uvicorn main:app --host 0.0.0.0 --port 8000 &
+        sleep 10  # Wait for server to start
+        
+    - name: Run E2E test suite
+      run: |
+        cd backend
+        python scripts/test_local_stack.py
+        
+    - name: Run Telegram webhook simulation
+      run: |
+        cd backend
+        python scripts/test_telegram_webhook.py
+        
+    - name: Test results
+      run: |
+        echo "🎉 All tests completed successfully!"
+        echo "Local stack is ready for deployment" 

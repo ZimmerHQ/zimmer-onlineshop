@@ -2,15 +2,13 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import ThemeProvider from '@/components/ThemeProvider'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Admin Dashboard',
-  description: 'Telegram Bot Admin Dashboard',
-  icons: {
-    icon: '/favicon.ico',
-  },
+  description: 'Shopping Assistant Admin Panel',
 }
 
 export default function RootLayout({
@@ -20,12 +18,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fa" dir="rtl">
-      <head>
-        <link rel="icon" href="/favicon.ico" />
-      </head>
       <body className={inter.className}>
         <ThemeProvider>
           {children}
+          <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>
     </html>

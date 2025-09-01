@@ -5,7 +5,8 @@ from typing import List, Optional
 from datetime import datetime
 from models import Order, OrderItem, Product, OrderStatus, PaymentStatus
 from database import get_db
-from schemas import OrderCreate, OrderUpdate, OrderOut, OrderSummary, OrderItemOut, OrderItemCreate
+from schemas.order import OrderOut, OrderSummary, OrderItemOut, OrderItemCreate
+from schemas.legacy import OrderCreate, OrderUpdate
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
