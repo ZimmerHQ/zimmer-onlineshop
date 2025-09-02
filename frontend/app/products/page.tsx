@@ -66,8 +66,7 @@ export default function ProductsPage() {
     stock: '',
     category_id: '',
     sizes: '',
-    image_url: '',
-    thumbnail_url: ''
+    image_url: ''
   })
 
   // Image upload states
@@ -273,23 +272,25 @@ export default function ProductsPage() {
         imageUrl = await uploadImage(selectedImage)
       }
       
-      // Process sizes field safely - backend expects array of strings
-      let processedSizes = null;
+      // Build attributes from sizes and other fields
+      const attributes: Record<string, string[]> = {};
       if (productForm.sizes && productForm.sizes.trim()) {
         const sizesArray = productForm.sizes.split(',').map(s => s.trim()).filter(s => s);
-        processedSizes = sizesArray.length > 0 ? sizesArray : null;
+        if (sizesArray.length > 0) {
+          attributes.size = sizesArray;
+        }
       }
       
       const productData = {
         name: productForm.name,
-        description: productForm.description,
+        description: productForm.description || "",
         price: parseFloat(productForm.price) || 0,
         stock: parseInt(productForm.stock) || 0,
         category_id: parseInt(productForm.category_id) || 0,
-        sizes: processedSizes || [],
-        image_url: imageUrl || productForm.image_url,
-        thumbnail_url: productForm.thumbnail_url || imageUrl,
-        category_name: '', // Will be set by backend
+        image_url: imageUrl || productForm.image_url || undefined,
+        tags: [],
+        labels: [],
+        attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
         is_active: true
       };
       
@@ -305,8 +306,7 @@ export default function ProductsPage() {
         stock: '',
         category_id: '',
         sizes: '',
-        image_url: '',
-        thumbnail_url: ''
+        image_url: ''
       })
       removeImage()
       alert('محصول با موفقیت اضافه شد!')
@@ -331,7 +331,7 @@ export default function ProductsPage() {
     }
   }
 
-  const handleDeleteProduct = async (id: string) => {
+  const handleDeleteProduct = async (id: number) => {
     if (confirm('آیا مطمئن هستید که می‌خواهید این محصول را حذف کنید؟')) {
       try {
         await deleteProduct(id)
@@ -567,9 +567,9 @@ export default function ProductsPage() {
                   <div key={product.id} className="border border-gray-200 rounded-lg p-4">
                     {/* Product Thumbnail */}
                     <div className="mb-3">
-                      {product.thumbnail_url || product.image_url ? (
-                        <img
-                          src={product.thumbnail_url || product.image_url}
+                                              {product.image_url ? (
+                          <img
+                            src={product.image_url}
                           alt={product.name}
                           className="w-full h-32 object-cover rounded-lg border"
                           onError={(e) => {
@@ -595,8 +595,7 @@ export default function ProductsPage() {
                               stock: (product.stock || 0).toString(),
                               category_id: product.category_id.toString(),
                               sizes: product.sizes?.join(', ') || '',
-                              image_url: product.image_url || '',
-                              thumbnail_url: product.thumbnail_url || ''
+                              image_url: product.image_url || ''
                             })
                             setShowProductModal(true)
                           }}
@@ -605,7 +604,7 @@ export default function ProductsPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteProduct(product.id.toString())}
+                          onClick={() => handleDeleteProduct(product.id)}
                           className="p-1 text-red-600 hover:bg-red-50 rounded"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -770,19 +769,7 @@ export default function ProductsPage() {
                     />
                   </div>
                   
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">تصویر کوچک (URL)</label>
-                    <input
-                      type="url"
-                      value={productForm.thumbnail_url}
-                      onChange={(e) => setProductForm({...productForm, thumbnail_url: e.target.value})}
-                      placeholder="https://example.com/thumbnail.jpg"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div className="text-xs text-gray-500 mt-1">
-                      تصویر کوچک برای نمایش در لیست محصولات (اختیاری)
-                    </div>
-                  </div>
+
                   
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">آپلود تصویر</label>
