@@ -30,5 +30,9 @@ export type Product = {
   is_active: boolean;
   createdAt?: string;
   updatedAt?: string;
+  // Computed fields from API response
+  category_name?: string;
+  available_sizes?: string[];
+  available_colors?: string[];
   // NOTE: available_sizes / available_colors are UI-only helpers; do NOT include in API Product type
 }; 
