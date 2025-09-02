@@ -32,7 +32,12 @@ export type Product = {
   updatedAt?: string;
   // Computed fields from API response
   category_name?: string;
+  category?: string;  // Used in chat page
   available_sizes?: string[];
   available_colors?: string[];
+  image?: string;  // Used in chat page (alternative to image_url)
+  // Analytics fields
+  sales?: number;
+  revenue?: number;
   // NOTE: available_sizes / available_colors are UI-only helpers; do NOT include in API Product type
 }; 
