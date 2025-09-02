@@ -594,7 +594,7 @@ export default function ProductsPage() {
                               price: product.price.toString(),
                               stock: (product.stock || 0).toString(),
                               category_id: product.category_id.toString(),
-                              sizes: product.sizes?.join(', ') || '',
+                              sizes: product.attributes?.size?.join(', ') || '',
                               image_url: product.image_url || ''
                             })
                             setShowProductModal(true)
