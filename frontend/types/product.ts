@@ -39,5 +39,13 @@ export type Product = {
   // Analytics fields
   sales?: number;
   revenue?: number;
+  // Additional fields used in AI tools
+  total_stock?: number;
+  thumbnail_url?: string;
+  images?: string[];
+  variants?: any[];  // Product variants
+  // Snake_case properties from API response
+  created_at?: string;
+  updated_at?: string;
   // NOTE: available_sizes / available_colors are UI-only helpers; do NOT include in API Product type
 }; 
