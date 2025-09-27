@@ -30,3 +30,9 @@ apscheduler>=3.10.0
 
 # Production dependencies
 gunicorn>=21.2.0
+
+# LangChain and LangGraph dependencies
+langchain>=0.2.0
+langgraph>=0.2.26
+langchain-openai>=0.1.7
+langchain-community>=0.2.0

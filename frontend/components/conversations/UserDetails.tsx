@@ -26,15 +26,17 @@ import {
 interface UserDetails {
   id: string;
   name: string;
-  username: string;
+  username: string | null;
   phone: string;
-  address: string;
+  address: string | null;
   visits_count: number;
-  last_seen: string;
+  last_seen: string | null;
   total_orders: number;
   total_spent: number;
   orders: Order[];
   messages: Message[];
+  channel?: string;
+  telegram_user_id?: string | null;
 }
 
 interface Order {
@@ -76,7 +78,17 @@ export default function UserDetails({ userId }: UserDetailsProps) {
       setLoading(true);
       setError(null);
       
-      const userData = await conversationsApi.getUserDetails(userId);
+      const response = await conversationsApi.getUserDetails(userId);
+      
+      // Handle the new nested response structure
+      const userData = {
+        ...response.profile,
+        orders: response.orders || [],
+        messages: response.messages || [],
+        total_orders: response.orders?.length || 0,
+        total_spent: response.orders?.reduce((sum: number, order: Order) => sum + order.total_amount, 0) || 0
+      };
+      
       setUser(userData);
       setPhoneValue(userData.phone || '');
       setAddressValue(userData.address || '');
@@ -227,7 +239,7 @@ export default function UserDetails({ userId }: UserDetailsProps) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">نام کاربری</label>
-              <p className="text-gray-900">@{user.username}</p>
+              <p className="text-gray-900">{user.username ? `@${user.username}` : 'نامشخص'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">شماره تلفن</label>

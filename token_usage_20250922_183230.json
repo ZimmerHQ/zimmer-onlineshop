@@ -1,0 +1,142 @@
+{
+  "export_timestamp": "2025-09-22T18:32:30.383439",
+  "global_metrics": {
+    "total_tokens": 5260,
+    "total_cost_usd": 0.14344,
+    "total_sessions": 3,
+    "total_zimmer_tokens": 1789,
+    "avg_tokens_per_session": 1753.3333333333333,
+    "avg_cost_per_session": 0.04781333333333334,
+    "model_breakdown": {
+      "gpt-3.5-turbo": {
+        "tokens": 1760,
+        "cost": 0.0024400000000000003,
+        "sessions": 5
+      },
+      "gpt-4": {
+        "tokens": 3500,
+        "cost": 0.14100000000000001,
+        "sessions": 3
+      }
+    },
+    "efficiency_rating": "Excellent (≤300 tokens/conversation)"
+  },
+  "session_data": {
+    "session_001": [
+      {
+        "session_id": "session_001",
+        "timestamp": "2025-09-22 18:32:30.377660",
+        "prompt_tokens": 150,
+        "completion_tokens": 100,
+        "total_tokens": 250,
+        "model": "gpt-3.5-turbo",
+        "cost_usd": 0.00035,
+        "conversation_length": 3,
+        "zimmer_tokens": 49
+      },
+      {
+        "session_id": "session_001",
+        "timestamp": "2025-09-22 18:32:30.377717",
+        "prompt_tokens": 200,
+        "completion_tokens": 120,
+        "total_tokens": 320,
+        "model": "gpt-3.5-turbo",
+        "cost_usd": 0.00044,
+        "conversation_length": 3,
+        "zimmer_tokens": 64
+      },
+      {
+        "session_id": "session_001",
+        "timestamp": "2025-09-22 18:32:30.377732",
+        "prompt_tokens": 180,
+        "completion_tokens": 110,
+        "total_tokens": 290,
+        "model": "gpt-3.5-turbo",
+        "cost_usd": 0.00039999999999999996,
+        "conversation_length": 3,
+        "zimmer_tokens": 58
+      }
+    ],
+    "session_002": [
+      {
+        "session_id": "session_002",
+        "timestamp": "2025-09-22 18:32:30.377741",
+        "prompt_tokens": 800,
+        "completion_tokens": 400,
+        "total_tokens": 1200,
+        "model": "gpt-4",
+        "cost_usd": 0.048,
+        "conversation_length": 2,
+        "zimmer_tokens": 600
+      },
+      {
+        "session_id": "session_002",
+        "timestamp": "2025-09-22 18:32:30.377749",
+        "prompt_tokens": 1000,
+        "completion_tokens": 500,
+        "total_tokens": 1500,
+        "model": "gpt-4",
+        "cost_usd": 0.06,
+        "conversation_length": 2,
+        "zimmer_tokens": 750
+      }
+    ],
+    "session_003": [
+      {
+        "session_id": "session_003",
+        "timestamp": "2025-09-22 18:32:30.377758",
+        "prompt_tokens": 300,
+        "completion_tokens": 200,
+        "total_tokens": 500,
+        "model": "gpt-3.5-turbo",
+        "cost_usd": 0.0007,
+        "conversation_length": 5,
+        "zimmer_tokens": 60
+      },
+      {
+        "session_id": "session_003",
+        "timestamp": "2025-09-22 18:32:30.377769",
+        "prompt_tokens": 500,
+        "completion_tokens": 300,
+        "total_tokens": 800,
+        "model": "gpt-4",
+        "cost_usd": 0.033,
+        "conversation_length": 5,
+        "zimmer_tokens": 160
+      },
+      {
+        "session_id": "session_003",
+        "timestamp": "2025-09-22 18:32:30.377776",
+        "prompt_tokens": 250,
+        "completion_tokens": 150,
+        "total_tokens": 400,
+        "model": "gpt-3.5-turbo",
+        "cost_usd": 0.0005499999999999999,
+        "conversation_length": 5,
+        "zimmer_tokens": 48
+      }
+    ]
+  },
+  "optimization_plan": {
+    "total_recommendations": 1,
+    "recommendations": [
+      {
+        "category": "Conversation Length",
+        "priority": "High",
+        "issue": "2 sessions using excessive tokens",
+        "solution": "Implement conversation summarization and context window management",
+        "potential_savings": "20-40% token reduction"
+      }
+    ],
+    "estimated_total_savings": "30-60% token and cost reduction",
+    "implementation_priority": [
+      {
+        "category": "Conversation Length",
+        "priority": "High",
+        "issue": "2 sessions using excessive tokens",
+        "solution": "Implement conversation summarization and context window management",
+        "potential_savings": "20-40% token reduction"
+      }
+    ]
+  }
+}

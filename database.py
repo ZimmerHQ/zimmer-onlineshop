@@ -1,7 +1,7 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from config import DATABASE_URL, DB_POOL_SIZE, DB_MAX_OVERFLOW
+from backend.config import DATABASE_URL, DB_POOL_SIZE, DB_MAX_OVERFLOW
 
 # Validate DATABASE_URL
 if not DATABASE_URL:
@@ -33,5 +33,21 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+# Safe DB session helper with automatic commit/rollback
+from contextlib import contextmanager
+
+@contextmanager
+def session_scope():
+    """Safe database session with automatic commit/rollback handling."""
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

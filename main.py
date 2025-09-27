@@ -2,6 +2,9 @@
 import logging
 import os
 
+# Load environment variables first
+import env
+
 # Load configuration first
 from backend.config import CORS_ORIGINS, IS_PRODUCTION, print_config_summary
 
@@ -12,18 +15,8 @@ logger = logging.getLogger(__name__)
 # Print configuration summary
 print_config_summary()
 
-# Validate OpenAI API key in production
-if IS_PRODUCTION:
-    try:
-        from env import assert_openai_key
-        assert_openai_key()
-        logger.info("✅ OpenAI API key validated")
-    except Exception as e:
-        logger.error(f"❌ OpenAI API key validation failed: {e}")
-        raise
-
 # Create database tables
-from backend.database import engine, Base
+from database import engine, Base
 logger.info("📋 Creating database tables...")
 Base.metadata.create_all(bind=engine)
 logger.info("✅ Database tables created successfully")
@@ -81,19 +74,11 @@ app.include_router(products_router, prefix="/api/products", tags=["products"])
 from routers.orders import router as orders_router
 app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
 
-# Remove duplicate product_handler router since we're using routers.products
-# from product_handler import router as product_router
-# app.include_router(product_router, prefix="/api/products")
-
-# Remove duplicate order_handler router since we're using routers.orders
-# from order_handler import router as order_router
-# app.include_router(order_router)
-
 from upload_handler import router as upload_router
 app.include_router(upload_router)
 
-from conversations_handler import router as conversations_router
-app.include_router(conversations_router)
+# from conversations_handler import router as conversations_router
+# app.include_router(conversations_router)
 
 from routers.imports import router as imports_router
 app.include_router(imports_router, prefix="/api/imports")
@@ -117,21 +102,36 @@ app.include_router(analytics_router, prefix="/api/analytics", tags=["analytics"]
 from routers.integrations import router as integrations_router
 app.include_router(integrations_router, prefix="/api/integrations", tags=["integrations"])
 
-
-
 # Add Conversations router
 from routers.conversations import router as conversations_router_new
 app.include_router(conversations_router_new, prefix="/api/conversations", tags=["conversations"])
 
 # Add FAQ router
 from routers.faq import router as faq_router
+from routers.crm import router as crm_router
 app.include_router(faq_router, prefix="/api/faq", tags=["faq"])
+
+# Add CRM router
+app.include_router(crm_router)
+
+# Add Customers router
+from routers.customers import router as customers_router
+app.include_router(customers_router, prefix="/api/customers", tags=["customers"])
+
+# Add Variants router
+from routers.variants import router as variants_router
+app.include_router(variants_router, prefix="/api/variants", tags=["variants"])
+
+# Add Support router
+from routers.support import router as support_router
+app.include_router(support_router, prefix="/api/support", tags=["support"])
+
+# Add Zimmer router
+from routers.zimmer import router as zimmer_router
+app.include_router(zimmer_router)
 
 # Add static files serving
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Add Next.js static files serving
-app.mount("/_next", StaticFiles(directory="frontend/.next"), name="next_static")
 
 # Add webhook management router
 from webhook_manager import router as webhook_router
@@ -203,34 +203,8 @@ except ImportError:
 except Exception as e:
     logging.error(f"❌ Error setting up scheduler: {e}")
 
-# Fallback route for SPA routing (must be last)
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    # Don't handle API routes - let them pass through to their respective routers
-    if full_path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="API endpoint not found")
-    
-    # Try to serve the frontend file
-    try:
-        from fastapi.responses import FileResponse
-        import os
-        
-        # Check if the file exists in the frontend out directory
-        frontend_path = f"frontend/out/{full_path}"
-        if os.path.exists(frontend_path):
-            return FileResponse(frontend_path)
-        
-        # If it's a directory or doesn't exist, serve index.html for SPA routing
-        index_path = "frontend/out/index.html"
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        
-        # Fallback to a simple message if frontend is not built
-        return {"status": "error", "message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
-        
-    except Exception as e:
-        return {"status": "error", "message": f"Error serving frontend: {str(e)}"}
-
+# Local development startup
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

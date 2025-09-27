@@ -17,34 +17,36 @@ SYSTEM_PROMPT = """تو یک فروشنده حرفه‌ای و دوستانه د
 
 رفتار فروشنده:
 - وقتی مشتری سلام می‌کند: گرم و دوستانه پاسخ بده
-- وقتی محصول می‌خواهد: لیست محصولات را نشان بده
+- وقتی محصول می‌خواهد: لیست محصولات را نشان بده با کد محصول
 - وقتی انتخاب می‌کند: جزئیات را بپرس (سایز، رنگ)
 - وقتی تایید می‌کند: سفارش را ثبت کن
 - همیشه پیشنهاد کمک بیشتر بده
 
+مهم: همیشه کد محصولات را در لیست نشان بده و از مشتری بخواه با کد پاسخ دهد.
+
 فقط JSON برگردان با این فیلدها:
 - action: SEARCH_PRODUCTS | SELECT_PRODUCT | COLLECT_VARIANTS | CONFIRM_ORDER | CREATE_ORDER | CLARIFY | SMALL_TALK
-- slots: { "product_id": null, "size": null, "color": null, "qty": 1 }
+- slots: { "product_code": null, "size": null, "color": null, "qty": 1 }
 - clarify: پیام کوتاه برای مشتری (اختیاری)
 
 قوانین:
 - "شلوار دارین؟" = SEARCH_PRODUCTS
-- "1" یا شماره = SELECT_PRODUCT  
+- کد محصول (مثل A0001) = SELECT_PRODUCT  
 - "43 مشکی" = COLLECT_VARIANTS
 - "بله" = CONFIRM_ORDER
 - سلام = SMALL_TALK"""
 
 FEW_SHOTS = [
     {"role":"user","content":"سلام"},
-    {"role":"assistant","content":json.dumps({"action":"SMALL_TALK","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":"سلام! به فروشگاه ما خوش آمدید 🌟 چطور می‌تونم کمکتون کنم؟"}, ensure_ascii=False)},
+    {"role":"assistant","content":json.dumps({"action":"SMALL_TALK","slots":{"product_code":None,"size":None,"color":None,"qty":1},"clarify":"سلام! به فروشگاه ما خوش آمدید 🌟 چطور می‌تونم کمکتون کنم؟"}, ensure_ascii=False)},
     {"role":"user","content":"شلوار دارین؟"},
-    {"role":"assistant","content":json.dumps({"action":"SEARCH_PRODUCTS","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
-    {"role":"user","content":"1"},
-    {"role":"assistant","content":json.dumps({"action":"SELECT_PRODUCT","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
+    {"role":"assistant","content":json.dumps({"action":"SEARCH_PRODUCTS","slots":{"product_code":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
+    {"role":"user","content":"A0001"},
+    {"role":"assistant","content":json.dumps({"action":"SELECT_PRODUCT","slots":{"product_code":"A0001","size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
     {"role":"user","content":"43 مشکی"},
-    {"role":"assistant","content":json.dumps({"action":"COLLECT_VARIANTS","slots":{"product_id":None,"size":"43","color":"مشکی","qty":1},"clarify":None}, ensure_ascii=False)},
+    {"role":"assistant","content":json.dumps({"action":"COLLECT_VARIANTS","slots":{"product_code":"A0001","size":"43","color":"مشکی","qty":1},"clarify":None}, ensure_ascii=False)},
     {"role":"user","content":"بله"},
-    {"role":"assistant","content":json.dumps({"action":"CONFIRM_ORDER","slots":{"product_id":None,"size":None,"color":None,"qty":1},"clarify":None}, ensure_ascii=False)},
+    {"role":"assistant","content":json.dumps({"action":"CONFIRM_ORDER","slots":{"product_code":"A0001","size":"43","color":"مشکی","qty":1},"clarify":None}, ensure_ascii=False)},
 ]
 
 def _parse_strict_json(txt: str) -> Dict[str, Any]:
@@ -64,7 +66,7 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
             logging.info("🔄 Using mock response due to missing API key")
             # Smart mock that acts like a real salesman
             action = "SMALL_TALK"
-            slots = {"product_id": None, "size": None, "color": None, "qty": 1}
+            slots = {"product_code": None, "size": None, "color": None, "qty": 1}
             
             user_lower = user_text.lower().strip()
             
@@ -132,7 +134,7 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
             return call_llm([], state, user_text)  # Recursive call to mock
         
         slots = Slots(**{
-            "product_id": data.get("slots",{}).get("product_id"),
+            "product_code": data.get("slots",{}).get("product_code"),
             "size": data.get("slots",{}).get("size"),
             "color": data.get("slots",{}).get("color"),
             "qty": data.get("slots",{}).get("qty",1) or 1,
@@ -144,7 +146,7 @@ def call_llm(history: List[Dict[str,str]], state: ConversationState, user_text: 
         # Return a fallback response instead of raising
         if "timeout" in str(e).lower() or "connection" in str(e).lower():
             logging.error("❌ Connection/timeout error in LLM call")
-            return AgentResponse(action="CLARIFY", slots=Slots(product_id=None, size=None, color=None, qty=1), clarify="متاسفم، مشکل اتصال. لطفاً دوباره تلاش کنید.")
+            return AgentResponse(action="CLARIFY", slots=Slots(product_code=None, size=None, color=None, qty=1), clarify="متاسفم، مشکل اتصال. لطفاً دوباره تلاش کنید.")
         else:
             logging.error(f"❌ Unexpected error in LLM call: {e}")
-            return AgentResponse(action="CLARIFY", slots=Slots(product_id=None, size=None, color=None, qty=1), clarify="متاسفم، خطا در پردازش. لطفاً دوباره تلاش کنید.") 
+            return AgentResponse(action="CLARIFY", slots=Slots(product_code=None, size=None, color=None, qty=1), clarify="متاسفم، خطا در پردازش. لطفاً دوباره تلاش کنید.") 

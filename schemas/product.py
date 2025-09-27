@@ -183,6 +183,7 @@ class ProductOut(BaseModel):
     # New fields for variants
     variants: List[VariantOut] = []
     total_stock: int = 0  # Computed field: sum of variant stocks or product stock
+    variants_count: int = 0  # Number of variants for this product
     
     @field_validator('sizes', mode='before')
     @classmethod
@@ -282,6 +283,7 @@ class ProductDetails(BaseModel):
     category: dict  # {id, name, prefix}
     images: List[str]  # [thumbnail_url, image_url]
     variants: List[VariantOut]
+    variants_count: int  # Number of variants for this product
     available_sizes: List[str]
     available_colors: List[str]
     tags: Optional[str]

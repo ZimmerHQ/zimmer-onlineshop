@@ -11,21 +11,21 @@ export const conversationsApi = {
     if (params.page) searchParams.append('page', params.page.toString());
     if (params.page_size) searchParams.append('page_size', params.page_size.toString());
     
-    const response = await fetch(`${API_BASE}/conversations/users?${searchParams.toString()}`);
+    const response = await fetch(`${API_BASE}/api/conversations/users?${searchParams.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch users');
     return response.json();
   },
 
   // Get user details
   async getUserDetails(id: string) {
-    const response = await fetch(`${API_BASE}/conversations/users/${id}`);
+    const response = await fetch(`${API_BASE}/api/conversations/users/${id}`);
     if (!response.ok) throw new Error('Failed to fetch user details');
     return response.json();
   },
 
   // Update user
   async updateUser(id: string, payload: { phone?: string; address?: string }) {
-    const response = await fetch(`${API_BASE}/conversations/users/${id}`, {
+    const response = await fetch(`${API_BASE}/api/conversations/users/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -43,7 +43,7 @@ export const analyticsApi = {
     if (params.start_date) searchParams.append('start_date', params.start_date);
     if (params.end_date) searchParams.append('end_date', params.end_date);
     
-    const response = await fetch(`${API_BASE}/analytics/summary?${searchParams.toString()}`);
+    const response = await fetch(`${API_BASE}/api/analytics/summary?${searchParams.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch analytics');
     return response.json();
   },

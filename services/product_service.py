@@ -89,6 +89,7 @@ def get_product_details(db: Session, product_id: int) -> Optional[ProductDetails
         },
         images=images,
         variants=variants,
+        variants_count=len(variants),
         available_sizes=available_sizes,
         available_colors=available_colors,
         tags=product.tags
@@ -539,7 +540,8 @@ def to_product_out(product: Product) -> ProductOut:
         created_at=product.created_at,
         updated_at=product.updated_at,
         variants=variants,
-        total_stock=total_stock
+        total_stock=total_stock,
+        variants_count=len(variants)
     )
 
 

@@ -1,5 +1,5 @@
 from openai import OpenAI
-from config import OPENAI_API_KEY
+from backend.config import OPENAI_API_KEY
 from typing import Optional
 
 # Configure OpenAI client (same as gpt_service)

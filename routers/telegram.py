@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from services.telegram_service import TelegramService
 from services.faq_service import FAQService
-from services.crm_service import CRMService
+from services.crm_service import list_customers_with_stats, get_customer_detail, get_customer_by_phone, get_crm_overview
 from schemas.telegram import (
     TelegramWebhookIn, TelegramConfigCreate, TelegramConfigUpdate, 
     TelegramConfigOut, TelegramUserOut, TelegramMessageOut,
@@ -221,13 +221,33 @@ async def list_telegram_users(
 async def get_telegram_user(user_id: int, db: Session = Depends(get_db)):
     """Get detailed information about a Telegram user"""
     try:
-        crm_service = CRMService(db)
-        user_summary = crm_service.get_user_summary(user_id)
-        
-        if not user_summary:
+        # Get Telegram user info
+        from models import TelegramUser
+        user = db.query(TelegramUser).filter(TelegramUser.id == user_id).first()
+        if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        return user_summary
+        # Get CRM customer info if phone exists
+        customer_info = None
+        if user.phone:
+            customer_info = get_customer_by_phone(db, user.phone)
+        
+        return {
+            "user": {
+                "id": user.id,
+                "telegram_user_id": user.telegram_user_id,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "note": user.note,
+                "first_seen": user.first_seen,
+                "last_seen": user.last_seen,
+                "visits_count": user.visits_count,
+                "is_blocked": user.is_blocked
+            },
+            "customer": customer_info
+        }
         
     except HTTPException:
         raise
@@ -245,16 +265,34 @@ async def list_telegram_messages(
 ):
     """List Telegram messages with optional filtering"""
     try:
-        crm_service = CRMService(db)
+        from models import TelegramMessage, TelegramUser
         
-        filters = {}
+        query = db.query(TelegramMessage).join(TelegramUser, TelegramMessage.user_id == TelegramUser.id)
+        
         if user_id:
-            filters['user_id'] = user_id
+            query = query.filter(TelegramMessage.user_id == user_id)
         if direction:
-            filters['direction'] = direction
-        filters['limit'] = limit
+            query = query.filter(TelegramMessage.direction == direction)
         
-        interactions = crm_service.list_interactions(filters)
+        messages = query.order_by(TelegramMessage.created_at.desc()).limit(limit).all()
+        
+        interactions = []
+        for msg in messages:
+            interactions.append({
+                'id': msg.id,
+                'direction': msg.direction,
+                'text': msg.text,
+                'created_at': msg.created_at,
+                'user': {
+                    'id': msg.user.id,
+                    'telegram_user_id': msg.user.telegram_user_id,
+                    'username': msg.user.username,
+                    'first_name': msg.user.first_name,
+                    'last_name': msg.user.last_name,
+                    'phone': msg.user.phone
+                }
+            })
+        
         return {"interactions": interactions}
         
     except Exception as e:
@@ -267,15 +305,38 @@ async def get_telegram_stats(
     days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db)
 ):
-    """Get Telegram bot statistics"""
+    """Get unified CRM statistics (works for both bot and Telegram)"""
     try:
-        crm_service = CRMService(db)
-        stats = crm_service.get_crm_stats(days)
+        # Get unified CRM overview
+        crm_overview = get_crm_overview(db)
         
-        return stats
+        # Get Telegram-specific stats
+        from models import TelegramUser, TelegramMessage
+        from datetime import datetime, timedelta
+        
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        
+        telegram_users = db.query(TelegramUser).count()
+        active_telegram_users = db.query(TelegramUser).filter(
+            TelegramUser.last_seen >= cutoff_date
+        ).count()
+        
+        telegram_messages = db.query(TelegramMessage).filter(
+            TelegramMessage.created_at >= cutoff_date
+        ).count()
+        
+        return {
+            "period_days": days,
+            "crm": crm_overview,
+            "telegram": {
+                "total_users": telegram_users,
+                "active_users": active_telegram_users,
+                "messages": telegram_messages
+            }
+        }
         
     except Exception as e:
-        logger.error(f"Error getting Telegram stats: {e}")
+        logger.error(f"Error getting stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get statistics")
 
 

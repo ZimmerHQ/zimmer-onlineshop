@@ -27,8 +27,8 @@ interface User {
   phone: string;
   visits_count: number;
   last_seen: string;
-  total_orders: number;
-  total_spent: number;
+  orders_count: number;
+  total_spend: number;
 }
 
 interface UsersResponse {
@@ -270,11 +270,11 @@ export default function UsersList() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                         <div className="flex items-center justify-center">
                           <ShoppingCart className="h-4 w-4 text-gray-400 ml-1" />
-                          {user.total_orders}
+                          {user.orders_count}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {user.total_spent > 0 ? formatCurrency(user.total_spent) : '0 تومان'}
+                        {user.total_spend > 0 ? formatCurrency(user.total_spend) : '0 تومان'}
                       </td>
                     </tr>
                   ))

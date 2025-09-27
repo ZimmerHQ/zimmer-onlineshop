@@ -6,91 +6,35 @@ import { useDashboardStore, type SupportRequest } from '@/lib/store'
 import { formatDate } from '@/lib/utils'
 import { Headphones, Phone, CheckCircle, Clock, User, AlertCircle, MessageSquare, Mail, Star } from 'lucide-react'
 
-// Sample dummy support requests data
-const dummySupportRequests: SupportRequest[] = [
-  {
-    id: '1',
-    userId: 'user_001',
-    phone: '09123456789',
-    message: 'سلام، من دیروز یک سفارش ثبت کردم اما هنوز وضعیت آن تغییر نکرده. شماره سفارش: ORD-2024-001. لطفاً بررسی کنید.',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-  },
-  {
-    id: '2',
-    userId: 'user_002',
-    phone: '09987654321',
-    message: 'محصولی که دریافت کردم با تصویر سایت متفاوت است. کیفیت پایین‌تری دارد. می‌خواهم بازگشت کنم.',
-    status: 'handled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1), // 1 day ago
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
-  },
-  {
-    id: '3',
-    userId: 'user_003',
-    phone: '09351234567',
-    message: 'آیا امکان ارسال رایگان برای خریدهای بالای ۵۰۰ هزار تومان دارید؟ و آیا به شهرستان‌ها هم ارسال می‌کنید؟',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6), // 6 hours ago
-  },
-  {
-    id: '4',
-    userId: 'user_004',
-    phone: '09111222333',
-    message: 'سایت شما عالی است! محصولات با کیفیت و قیمت مناسب. فقط می‌خواستم تشکر کنم.',
-    status: 'handled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1), // 1 day ago
-  },
-  {
-    id: '5',
-    userId: 'user_005',
-    phone: '09334445556',
-    message: 'من سایز M سفارش دادم اما سایز L دریافت کردم. می‌خواهم تعویض کنم.',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-  },
-  {
-    id: '6',
-    userId: 'user_006',
-    phone: '09199888777',
-    message: 'آیا امکان پرداخت در محل دارید؟ و آیا کارت‌های اعتباری خارجی را قبول می‌کنید؟',
-    status: 'handled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-  },
-  {
-    id: '7',
-    userId: 'user_007',
-    phone: '09376665554',
-    message: 'محصولی که خریدم معیوب بود. در بسته‌بندی باز شده بود و آسیب دیده بود.',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
-  },
-  {
-    id: '8',
-    userId: 'user_008',
-    phone: '09122334455',
-    message: 'می‌خواستم بپرسم آیا امکان خرید عمده دارید؟ برای شرکت‌مان نیاز به ۵۰ عدد داریم.',
-    status: 'handled',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4), // 4 days ago
-  },
-]
-
 export default function SupportPage() {
-  const { supportRequests, loading, errors, fetchSupportRequests, markSupportRequestHandled, setSupportRequests } = useDashboardStore()
+  const { supportRequests, loading, errors, fetchSupportRequests, markSupportRequestHandled } = useDashboardStore()
 
   useEffect(() => {
-    // For demo purposes, set dummy data instead of fetching from API
-    setSupportRequests(dummySupportRequests)
-  }, [setSupportRequests])
+    fetchSupportRequests()
+  }, [fetchSupportRequests])
 
   const pendingRequests = supportRequests.filter(request => request.status === 'pending')
-  const handledRequests = supportRequests.filter(request => request.status === 'handled')
+  const inProgressRequests = supportRequests.filter(request => request.status === 'in_progress')
+  const resolvedRequests = supportRequests.filter(request => request.status === 'resolved')
+  const closedRequests = supportRequests.filter(request => request.status === 'closed')
 
-  const handleMarkHandled = (id: string) => {
-    markSupportRequestHandled(id)
+  const handleMarkHandled = (id: number) => {
+    markSupportRequestHandled(id.toString())
+  }
+
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return { text: 'در انتظار', bg: 'bg-yellow-100', textColor: 'text-yellow-800', border: 'border-yellow-200' }
+      case 'in_progress':
+        return { text: 'در حال بررسی', bg: 'bg-blue-100', textColor: 'text-blue-800', border: 'border-blue-200' }
+      case 'resolved':
+        return { text: 'حل شده', bg: 'bg-green-100', textColor: 'text-green-800', border: 'border-green-200' }
+      case 'closed':
+        return { text: 'بسته شده', bg: 'bg-gray-100', textColor: 'text-gray-800', border: 'border-gray-200' }
+      default:
+        return { text: 'نامشخص', bg: 'bg-gray-100', textColor: 'text-gray-800', border: 'border-gray-200' }
+    }
   }
 
   if (loading) {
@@ -181,8 +125,8 @@ export default function SupportPage() {
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
               <div className="mr-4">
-                <p className="text-sm font-medium text-gray-500">رسیدگی شده</p>
-                <p className="text-2xl font-semibold text-gray-900">{handledRequests.length}</p>
+                <p className="text-sm font-medium text-gray-500">حل شده</p>
+                <p className="text-2xl font-semibold text-gray-900">{resolvedRequests.length}</p>
               </div>
             </div>
           </div>
@@ -228,18 +172,16 @@ export default function SupportPage() {
                       </div>
                       <div>
                         <span className="text-sm font-medium text-gray-900">
-                          کاربر {request.userId}
+                          {request.customer_name}
                         </span>
-                        {request.phone && (
-                          <div className="flex items-center space-x-1 text-sm text-gray-500 mt-1">
-                            <Phone className="h-4 w-4" />
-                            <span>{request.phone}</span>
-                          </div>
-                        )}
+                        <div className="flex items-center space-x-1 text-sm text-gray-500 mt-1">
+                          <Phone className="h-4 w-4" />
+                          <span>{request.customer_phone}</span>
+                        </div>
                       </div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusDisplay(request.status).bg} ${getStatusDisplay(request.status).textColor} border ${getStatusDisplay(request.status).border}`}>
                         <Clock className="h-3 w-3 ml-1" />
-                        در انتظار
+                        {getStatusDisplay(request.status).text}
                       </span>
                     </div>
                     
@@ -250,7 +192,7 @@ export default function SupportPage() {
                     </div>
                     
                     <div className="flex items-center space-x-4 text-xs text-gray-400">
-                      <span>درخواست شده {formatDate(request.createdAt)}</span>
+                      <span>درخواست شده {formatDate(new Date(request.created_at))}</span>
                       {request.updatedAt && (
                         <span>رسیدگی شده {formatDate(request.updatedAt)}</span>
                       )}
@@ -294,9 +236,9 @@ export default function SupportPage() {
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">درخواست‌های رسیدگی شده</h2>
+                <h2 className="text-lg font-semibold text-gray-900">درخواست‌های حل شده</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  {handledRequests.length} درخواست تکمیل شده
+                  {resolvedRequests.length} درخواست حل شده
                 </p>
               </div>
               <div className="flex items-center space-x-2">
@@ -307,7 +249,7 @@ export default function SupportPage() {
           </div>
           
           <div className="divide-y divide-gray-200">
-            {handledRequests.map((request) => (
+            {resolvedRequests.map((request) => (
               <div key={request.id} className="p-6 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start">
                   <div className="flex-1">
@@ -317,14 +259,12 @@ export default function SupportPage() {
                       </div>
                       <div>
                         <span className="text-sm font-medium text-gray-900">
-                          کاربر {request.userId}
+                          {request.customer_name}
                         </span>
-                        {request.phone && (
-                          <div className="flex items-center space-x-1 text-sm text-gray-500 mt-1">
-                            <Phone className="h-4 w-4" />
-                            <span>{request.phone}</span>
-                          </div>
-                        )}
+                        <div className="flex items-center space-x-1 text-sm text-gray-500 mt-1">
+                          <Phone className="h-4 w-4" />
+                          <span>{request.customer_phone}</span>
+                        </div>
                       </div>
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
                         <CheckCircle className="h-3 w-3 ml-1" />
@@ -339,7 +279,7 @@ export default function SupportPage() {
                     </div>
                     
                     <div className="flex items-center space-x-4 text-xs text-gray-400">
-                      <span>درخواست شده {formatDate(request.createdAt)}</span>
+                      <span>درخواست شده {formatDate(new Date(request.created_at))}</span>
                       {request.updatedAt && (
                         <span>رسیدگی شده {formatDate(request.updatedAt)}</span>
                       )}
@@ -349,7 +289,7 @@ export default function SupportPage() {
               </div>
             ))}
             
-            {handledRequests.length === 0 && (
+            {resolvedRequests.length === 0 && (
               <div className="text-center py-12">
                 <Headphones className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">هیچ درخواست رسیدگی شده‌ای وجود ندارد</h3>

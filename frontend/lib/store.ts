@@ -40,13 +40,78 @@ export interface Conversation {
 
 // SupportRequest interface
 export interface SupportRequest {
-  id: string
-  userId: string
-  phone?: string
+  id: number
+  customer_name: string
+  customer_phone: string
   message: string
-  status: 'pending' | 'handled'
-  createdAt: Date
-  updatedAt?: Date
+  status: 'pending' | 'in_progress' | 'resolved' | 'closed'
+  telegram_user_id?: string
+  admin_notes?: string
+  created_at: string
+  updated_at: string
+}
+
+// Product analytics interfaces
+export interface ProductAnalytics {
+  id: number;
+  name: string;
+  code: string;
+  price: number;
+  stock: number;
+  category_id: number;
+  category_name: string;
+  total_sold: number;
+  total_revenue: number;
+  order_count: number;
+  last_sale_date?: string;
+  avg_price_sold: number;
+}
+
+export interface ProductAnalyticsSearchResponse {
+  products: ProductAnalytics[];
+  total_found: number;
+  search_query: string;
+  date_range: {
+    start_date: string;
+    end_date: string;
+  };
+}
+
+export interface ProductAnalyticsDetails {
+  product: {
+    id: number;
+    name: string;
+    code: string;
+    price: number;
+    stock: number;
+    category_id: number;
+  };
+  analytics: {
+    total_sold: number;
+    total_revenue: number;
+    order_count: number;
+    avg_sale_price: number;
+    min_sale_price: number;
+    max_sale_price: number;
+  };
+  daily_sales: Array<{
+    date: string;
+    sold: number;
+    revenue: number;
+  }>;
+  recent_orders: Array<{
+    order_id: number;
+    order_number: string;
+    customer_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    created_at: string;
+  }>;
+  date_range: {
+    start_date: string;
+    end_date: string;
+  };
 }
 
 // Order interface
@@ -61,6 +126,14 @@ export interface Order {
   created_at: string
   items_count?: number
   items?: any[]
+  customer_snapshot?: {
+    first_name: string
+    last_name: string
+    phone: string
+    address: string
+    postal_code: string
+    notes: string
+  }
 }
 
 // Theme and Language types
@@ -101,6 +174,16 @@ interface DashboardState {
   supportRequests: SupportRequest[];
   fetchSupportRequests: () => Promise<void>;
   markSupportRequestHandled: (id: string) => Promise<void>;
+  // Analytics state
+  analytics: any;
+  fetchAnalytics: () => Promise<void>;
+  // Product analytics state
+  productAnalytics: ProductAnalyticsSearchResponse | null;
+  productAnalyticsDetails: ProductAnalyticsDetails | null;
+  productAnalyticsLoading: boolean;
+  productAnalyticsError: string | null;
+  searchProductAnalytics: (query: string, startDate?: string, endDate?: string, limit?: number) => Promise<void>;
+  getProductAnalyticsDetails: (productId: number, startDate?: string, endDate?: string) => Promise<void>;
   setSupportRequests: (requests: SupportRequest[]) => void;
   // Orders state
   orders: Order[];
@@ -485,9 +568,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   // Support requests state
   supportRequests: [],
   
+  // Analytics state
+  analytics: null,
+  
+  // Product analytics state
+  productAnalytics: null,
+  productAnalyticsDetails: null,
+  productAnalyticsLoading: false,
+  productAnalyticsError: null,
+  
   fetchSupportRequests: async () => {
     try {
-      const response = await fetch(`${apiBase}/api/support`, {
+      const response = await fetch(`${apiBase}/api/support/requests`, {
         mode: 'cors',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -495,47 +587,27 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         const data = await response.json();
         set({ supportRequests: data });
       } else {
-        // Fallback to dummy data for demo
-        const dummyRequests: SupportRequest[] = [
-          {
-            id: '1',
-            userId: 'user1',
-            phone: '09123456789',
-            message: 'مشکل در سفارش',
-            status: 'pending',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }
-        ];
-        set({ supportRequests: dummyRequests });
+        console.error('Failed to fetch support requests:', response.status);
+        set({ supportRequests: [] });
       }
     } catch (error) {
-      // Fallback to dummy data for demo
-      const dummyRequests: SupportRequest[] = [
-        {
-          id: '1',
-          userId: 'user1',
-          phone: '09123456789',
-          message: 'مشکل در سفارش',
-          status: 'pending',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
-      ];
-      set({ supportRequests: dummyRequests });
+      console.error('Error fetching support requests:', error);
+      set({ supportRequests: [] });
     }
   },
   
   markSupportRequestHandled: async (id) => {
     try {
-      const response = await fetch(`${apiBase}/api/support/${id}/handle`, {
-        method: 'PUT',
-        mode: 'cors'
+      const response = await fetch(`${apiBase}/api/support/requests/${id}`, {
+        method: 'PATCH',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved' })
       });
       if (response.ok) {
         set(state => ({
           supportRequests: state.supportRequests.map(r => 
-            r.id === id ? { ...r, status: 'handled' } : r
+            r.id === id ? { ...r, status: 'resolved' } : r
           )
         }));
       }
@@ -546,11 +618,87 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   
   setSupportRequests: (requests) => set({ supportRequests: requests }),
   
+  // Analytics functions
+  fetchAnalytics: async () => {
+    try {
+      const response = await fetch(`${apiBase}/api/analytics/summary`, {
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        set({ analytics: data });
+      } else {
+        console.error('Failed to fetch analytics:', response.status);
+        set({ analytics: null });
+      }
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+      set({ analytics: null });
+    }
+  },
+
+  // Product analytics functions
+  searchProductAnalytics: async (query: string, startDate?: string, endDate?: string, limit: number = 20) => {
+    set({ productAnalyticsLoading: true, productAnalyticsError: null });
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        limit: limit.toString()
+      });
+      
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      
+      const response = await fetch(`${apiBase}/api/analytics/products/search?${params}`, {
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        set({ productAnalytics: data, productAnalyticsLoading: false });
+      } else {
+        console.error('Failed to search product analytics:', response.status);
+        set({ productAnalytics: null, productAnalyticsError: 'خطا در جستجوی محصولات', productAnalyticsLoading: false });
+      }
+    } catch (error) {
+      console.error('Error searching product analytics:', error);
+      set({ productAnalytics: null, productAnalyticsError: 'خطا در اتصال به سرور', productAnalyticsLoading: false });
+    }
+  },
+
+  getProductAnalyticsDetails: async (productId: number, startDate?: string, endDate?: string) => {
+    set({ productAnalyticsLoading: true, productAnalyticsError: null });
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      
+      const response = await fetch(`${apiBase}/api/analytics/products/${productId}/details?${params}`, {
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        set({ productAnalyticsDetails: data, productAnalyticsLoading: false });
+      } else {
+        console.error('Failed to get product analytics details:', response.status);
+        set({ productAnalyticsDetails: null, productAnalyticsError: 'خطا در دریافت جزئیات محصول', productAnalyticsLoading: false });
+      }
+    } catch (error) {
+      console.error('Error getting product analytics details:', error);
+      set({ productAnalyticsDetails: null, productAnalyticsError: 'خطا در اتصال به سرور', productAnalyticsLoading: false });
+    }
+  },
+  
   // Orders state
   orders: [],
   
     fetchOrders: async () => {
     console.log('🔍 fetchOrders: Starting to fetch orders from', `${apiBase}/api/orders/`);
+    set({ loading: true, errors: null });
     try {
       const response = await fetch(`${apiBase}/api/orders/`, {
         mode: 'cors',
@@ -569,17 +717,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           items_count: order.items ? order.items.length : 0
         }));
         console.log('🔍 fetchOrders: Mapped orders:', mappedOrders);
-        set({ orders: mappedOrders });
+        set({ orders: mappedOrders, loading: false });
         console.log('✅ fetchOrders: Orders updated in store');
       } else {
         console.error('❌ fetchOrders: Failed to fetch orders:', response.status, response.statusText);
         const errorText = await response.text();
         console.error('❌ fetchOrders: Error response:', errorText);
-        set({ orders: [] });
+        set({ orders: [], loading: false, errors: `Failed to fetch orders: ${response.statusText}` });
       }
     } catch (error) {
       console.error('❌ fetchOrders: CORS or network error:', error);
-      set({ orders: [] });
+      set({ orders: [], loading: false, errors: 'Network error while fetching orders' });
     }
   },
   

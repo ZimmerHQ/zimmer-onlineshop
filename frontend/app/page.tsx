@@ -2,112 +2,46 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatsCard } from "@/components/ui/stats-card";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatusChip } from "@/components/ui/status-chip";
 import DashboardLayout from "@/components/DashboardLayout";
+import { useDashboardStore } from "@/lib/store";
+import { formatDate } from "@/lib/utils";
 import { 
   MessageSquare, 
   ShoppingCart, 
   Package, 
   Users, 
   TrendingUp,
-  Bot,
-  Clock,
-  CheckCircle
+  Bot
 } from "lucide-react";
 
-interface DashboardStats {
-  totalMessages: number;
-  totalOrders: number;
-  totalProducts: number;
-  totalUsers: number;
-  recentMessages: Array<{
-    id: string;
-    user: string;
-    message: string;
-    timestamp: string;
-    status: 'read' | 'unread';
-  }>;
-  recentOrders: Array<{
-    id: string;
-    customer: string;
-    amount: number;
-    status: 'pending' | 'confirmed' | 'shipped' | 'delivered';
-    timestamp: string;
-  }>;
-}
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalMessages: 0,
-    totalOrders: 0,
-    totalProducts: 0,
-    totalUsers: 0,
-    recentMessages: [],
-    recentOrders: []
-  });
+  const { 
+    orders, 
+    products, 
+    analytics, 
+    loading: storeLoading,
+    fetchOrders, 
+    fetchProducts, 
+    fetchAnalytics 
+  } = useDashboardStore();
+  
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading dashboard data
     const loadDashboardData = async () => {
       try {
-        // In a real app, you would fetch this data from your API
-        const mockStats: DashboardStats = {
-          totalMessages: 1247,
-          totalOrders: 89,
-          totalProducts: 24,
-          totalUsers: 156,
-          recentMessages: [
-            {
-              id: "1",
-              user: "احمد محمدی",
-              message: "سلام، شلوار دارین؟",
-              timestamp: "2 minutes ago",
-              status: "unread"
-            },
-            {
-              id: "2",
-              user: "فاطمه احمدی",
-              message: "قیمت پیراهن چقدره؟",
-              timestamp: "5 minutes ago",
-              status: "read"
-            },
-            {
-              id: "3",
-              user: "علی رضایی",
-              message: "سفارش من کجاست؟",
-              timestamp: "10 minutes ago",
-              status: "read"
-            }
-          ],
-          recentOrders: [
-            {
-              id: "ORD-2025-001",
-              customer: "احمد محمدی",
-              amount: 450000,
-              status: "confirmed",
-              timestamp: "1 hour ago"
-            },
-            {
-              id: "ORD-2025-002",
-              customer: "فاطمه احمدی",
-              amount: 320000,
-              status: "pending",
-              timestamp: "2 hours ago"
-            },
-            {
-              id: "ORD-2025-003",
-              customer: "علی رضایی",
-              amount: 780000,
-              status: "shipped",
-              timestamp: "3 hours ago"
-            }
-          ]
-        };
-        
-        setStats(mockStats);
+        setIsLoading(true);
+        // Fetch real data from the store
+        await Promise.all([
+          fetchOrders(),
+          fetchProducts(),
+          fetchAnalytics()
+        ]);
       } catch (error) {
         console.error("Error loading dashboard data:", error);
       } finally {
@@ -116,219 +50,209 @@ export default function DashboardPage() {
     };
 
     loadDashboardData();
-  }, []);
+  }, [fetchOrders, fetchProducts, fetchAnalytics]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'confirmed': return 'bg-blue-100 text-blue-800';
-      case 'shipped': return 'bg-purple-100 text-purple-800';
-      case 'delivered': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  // Calculate stats from real data
+  const stats = {
+    totalMessages: analytics?.total_messages || 0,
+    totalOrders: orders?.length || 0,
+    totalProducts: products?.length || 0,
+    totalUsers: analytics?.total_customers || 0,
+    recentMessages: [] as Array<{
+      id: string;
+      user: string;
+      message: string;
+      timestamp: string;
+      status: 'read' | 'unread';
+    }>, // We'll implement this later
+    recentOrders: orders?.slice(0, 5).map(order => ({
+      id: order.order_number,
+      customer: order.customer_name,
+      amount: order.final_amount,
+      status: order.status,
+      timestamp: order.created_at
+    })) || []
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fa-IR').format(amount) + ' تومان';
-  };
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-8 bg-gray-200 rounded mb-2" />
-                <div className="h-4 bg-gray-200 rounded w-1/2" />
-              </CardContent>
-            </Card>
-          ))}
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <div className="h-6 bg-gray-200 rounded mb-2 w-32 animate-pulse" />
+              <div className="h-4 bg-gray-200 rounded w-64 animate-pulse" />
+            </div>
+          </div>
+          
+          {/* KPI skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-xl border border-black/5 bg-white shadow-sm p-4 md:p-5 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded mb-3 w-16" />
+                <div className="flex items-center justify-between mb-3">
+                  <div className="h-8 w-8 bg-gray-200 rounded-lg" />
+                  <div className="h-4 bg-gray-200 rounded w-12" />
+                </div>
+                <div className="h-8 bg-gray-200 rounded w-20" />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      {/* Welcome Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Welcome to your Shopping Assistant Dashboard
-        </h1>
-        <p className="text-gray-600">
-          Monitor your customer interactions, orders, and bot performance in real-time.
-        </p>
+      {/* (A) Header row */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg md:text-xl font-semibold">داشبورد</h2>
+          <p className="text-sm text-muted-foreground">
+            تعاملات مشتریان، سفارش‌ها و عملکرد ربات را به صورت زنده نظارت کنید.
+          </p>
+        </div>
+        <div>
+          {/* Keep empty or show today/date if it already exists */}
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="bg-white border-gray-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Messages</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalMessages.toLocaleString()}</p>
-              </div>
-              <MessageSquare className="h-8 w-8 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-gray-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Orders</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
-              </div>
-              <ShoppingCart className="h-8 w-8 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-gray-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Products</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>
-              </div>
-              <Package className="h-8 w-8 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-gray-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Active Users</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
-              </div>
-              <Users className="h-8 w-8 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* (B) KPI row (4 cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatsCard
+          icon={<ShoppingCart className="h-5 w-5 text-primary-500" />}
+          label="کل سفارش‌ها"
+          value={stats.totalOrders}
+          deltaLabel="+8%"
+          delta={8}
+        />
+        
+        <StatsCard
+          icon={<MessageSquare className="h-5 w-5 text-primary-500" />}
+          label="کل پیام‌ها"
+          value={stats.totalMessages}
+          deltaLabel="+12%"
+          delta={12}
+        />
+        
+        <StatsCard
+          icon={<Package className="h-5 w-5 text-primary-500" />}
+          label="کل محصولات"
+          value={stats.totalProducts}
+          deltaLabel="+5%"
+          delta={5}
+        />
+        
+        <StatsCard
+          icon={<Users className="h-5 w-5 text-primary-500" />}
+          label="کل مشتریان"
+          value={stats.totalUsers}
+          deltaLabel="+15%"
+          delta={15}
+        />
       </div>
 
-      {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* (C) Two-column content */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Recent Orders */}
+        <SectionCard title="سفارش‌های اخیر">
+          <div className="space-y-3 md:max-h-[380px] md:overflow-auto">
+            {stats.recentOrders.length > 0 ? (
+              stats.recentOrders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between py-3 border-b border-black/5 last:border-b-0">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">
+                        <span dir="ltr" className="font-mono tabular-nums">{order.id}</span> - {order.customer}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{formatDate(new Date(order.timestamp))}</p>
+                    </div>
+                    <div className="flex items-center space-x-2 space-x-reverse mt-1">
+                      <span className="text-sm text-muted-foreground">
+                        <span dir="ltr" className="font-mono tabular-nums">{order.amount.toLocaleString('fa-IR')}</span> <span>تومان</span>
+                      </span>
+                      <StatusChip status={order.status as any} />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                <p>هیچ سفارشی یافت نشد</p>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+
         {/* Recent Messages */}
-        <Card className="bg-white border-gray-200">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <MessageSquare className="h-5 w-5" />
-              <span>Recent Messages</span>
-            </CardTitle>
-            <CardDescription>
-              Latest customer interactions with your shopping assistant
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {stats.recentMessages.map((message) => (
-                <div key={message.id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50">
+        <SectionCard title="پیام‌های اخیر">
+          <div className="space-y-3 md:max-h-[380px] md:overflow-auto">
+            {stats.recentMessages.length > 0 ? (
+              stats.recentMessages.map((message) => (
+                <div key={message.id} className="flex items-start space-x-3 space-x-reverse py-3 border-b border-black/5 last:border-b-0">
                   <div className="flex-shrink-0">
                     {message.status === 'unread' ? (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                      <div className="w-2 h-2 bg-primary-500 rounded-full" />
                     ) : (
-                      <div className="w-2 h-2 bg-gray-300 rounded-full" />
+                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-900">{message.user}</p>
-                      <p className="text-xs text-gray-500">{message.timestamp}</p>
+                      <p className="text-sm font-medium">{message.user}</p>
+                      <p className="text-xs text-muted-foreground">{message.timestamp}</p>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{message.message}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{message.message}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Orders */}
-        <Card className="bg-white border-gray-200">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <ShoppingCart className="h-5 w-5" />
-              <span>Recent Orders</span>
-            </CardTitle>
-            <CardDescription>
-              Latest customer orders and their status
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {stats.recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-900">{order.customer}</p>
-                      <p className="text-xs text-gray-500">{order.timestamp}</p>
-                    </div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <p className="text-sm text-gray-600">{order.id}</p>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
-                      {formatCurrency(order.amount)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                <p>هیچ پیامی یافت نشد</p>
+              </div>
+            )}
+          </div>
+        </SectionCard>
       </div>
 
-      {/* Quick Actions */}
-      <Card className="bg-white border-gray-200">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>
-            Common tasks and shortcuts for managing your store
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button 
-              onClick={() => router.push('/webhook')}
-              className="flex flex-col items-center p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-            >
-              <Bot className="h-6 w-6 text-gray-600 mb-2" />
-              <span className="text-sm font-medium text-gray-900">Setup Bot</span>
-            </button>
-            <button 
-              onClick={() => router.push('/products')}
-              className="flex flex-col items-center p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-            >
-              <Package className="h-6 w-6 text-gray-600 mb-2" />
-              <span className="text-sm font-medium text-gray-900">Add Product</span>
-            </button>
-            <button 
-              onClick={() => router.push('/conversations')}
-              className="flex flex-col items-center p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-            >
-              <MessageSquare className="h-6 w-6 text-gray-600 mb-2" />
-              <span className="text-sm font-medium text-gray-900">View Messages</span>
-            </button>
-            <button 
-              onClick={() => router.push('/analytics')}
-              className="flex flex-col items-center p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-            >
-              <TrendingUp className="h-6 w-6 text-gray-600 mb-2" />
-              <span className="text-sm font-medium text-gray-900">Analytics</span>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* (D) Quick actions (bottom) */}
+      <SectionCard title="دسترسی سریع">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button 
+            onClick={() => router.push('/products')}
+            className="flex flex-col items-center p-4 rounded-xl border border-black/5 hover:bg-gray-50 transition-transform hover:-translate-y-0.5 cursor-pointer"
+          >
+            <Package className="h-6 w-6 text-primary-500 mb-2" />
+            <span className="text-sm font-medium">افزودن محصول</span>
+          </button>
+          <button 
+            onClick={() => router.push('/analytics/crm')}
+            className="flex flex-col items-center p-4 rounded-xl border border-black/5 hover:bg-gray-50 transition-transform hover:-translate-y-0.5 cursor-pointer"
+          >
+            <Users className="h-6 w-6 text-primary-500 mb-2" />
+            <span className="text-sm font-medium">مدیریت مشتریان</span>
+          </button>
+          <button 
+            onClick={() => router.push('/analytics')}
+            className="flex flex-col items-center p-4 rounded-xl border border-black/5 hover:bg-gray-50 transition-transform hover:-translate-y-0.5 cursor-pointer"
+          >
+            <TrendingUp className="h-6 w-6 text-primary-500 mb-2" />
+            <span className="text-sm font-medium">تحلیل‌ها</span>
+          </button>
+          <button 
+            onClick={() => router.push('/webhook')}
+            className="flex flex-col items-center p-4 rounded-xl border border-black/5 hover:bg-gray-50 transition-transform hover:-translate-y-0.5 cursor-pointer"
+          >
+            <Bot className="h-6 w-6 text-primary-500 mb-2" />
+            <span className="text-sm font-medium">راه‌اندازی ربات</span>
+          </button>
+        </div>
+      </SectionCard>
     </DashboardLayout>
   );
 } 

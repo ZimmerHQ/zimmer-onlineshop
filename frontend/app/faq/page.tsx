@@ -64,7 +64,7 @@ export default function FAQPage() {
     
     try {
       const url = editingFaq 
-        ? `http://localhost:8000/api/faq/${editingFaq.id}`
+                ? `http://localhost:8000/api/faq/${editingFaq.id}`
         : 'http://localhost:8000/api/faq/';
       
       const method = editingFaq ? 'PATCH' : 'POST';

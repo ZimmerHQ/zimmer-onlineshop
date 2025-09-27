@@ -34,6 +34,8 @@ CORS_ORIGINS = [
     FRONTEND_URL,
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:8006",  # Add local development port
+    "http://127.0.0.1:8006",  # Add local development port
 ]
 
 # Add any additional CORS origins from environment

@@ -1,0 +1,84 @@
+from backend.ai.graph import app as chat_graph
+from backend.ai.agent import sales_agent_turn
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db
+from models import ChatMessage
+import json
+
+class ChatPayload(BaseModel):
+    conversation_id: str
+    message: str
+
+# Simple in-memory state storage (in production, use Redis or DB)
+_conversation_states = {}
+
+def load_conversation_state(db: Session, conversation_id: str) -> dict:
+    """Load conversation state from storage"""
+    return _conversation_states.get(conversation_id, {})
+
+def save_conversation_state(db: Session, conversation_id: str, state: dict):
+    """Save conversation state to storage"""
+    _conversation_states[conversation_id] = state
+
+router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+@router.get("/ping")
+def ping():
+    """Health check endpoint for the chat router."""
+    return {"ok": True}
+
+@router.post("/test")
+def test(payload: ChatPayload):
+    """Test endpoint that echoes back the payload for frontend wiring checks."""
+    return {"ok": True, "echo": payload.dict()}
+
+@router.post("/graph")
+def chat_via_graph(payload: ChatPayload, db: Session = Depends(get_db)):
+    # Log user message
+    user_msg = ChatMessage(
+        conversation_id=payload.conversation_id,
+        role="user",
+        text=payload.message
+    )
+    db.add(user_msg)
+    db.commit()
+    
+    # Use natural language sales agent
+    # Load state from database or create new
+    state = load_conversation_state(db, payload.conversation_id)
+    result = sales_agent_turn(db, payload.message, state)
+    # Save updated state
+    save_conversation_state(db, payload.conversation_id, result.get("state", {}))
+    reply = result.get("reply", "")
+    order_id = result.get("order_id")
+    status = result.get("status")
+    
+    # Log assistant message
+    assistant_msg = ChatMessage(
+        conversation_id=payload.conversation_id,
+        role="assistant",
+        text=reply
+    )
+    db.add(assistant_msg)
+    db.commit()
+    
+    return {
+        "reply": reply,
+        "order_id": order_id,
+        "status": status,
+    }
+
+# NEW: Make /api/chat default to graph
+@router.post("/")
+def chat_default(payload: ChatPayload, db: Session = Depends(get_db)):
+    try:
+        return chat_via_graph(payload, db)
+    except Exception as e:
+        # Fallback to simple response if agent fails
+        return {
+            "reply": f"متاسفانه خطایی رخ داد: {str(e)}",
+            "order_id": None,
+            "status": "error"
+        }

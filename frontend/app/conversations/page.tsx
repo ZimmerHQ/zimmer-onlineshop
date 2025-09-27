@@ -4,10 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useDashboardStore } from '@/lib/store';
-import { formatDate } from '@/lib/utils';
-import { MessageCircle, User, Bot, Loader2, AlertCircle, RefreshCw, Eye, Trash2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import UsersList from '@/components/conversations/UsersList';
+import { formatDate, apiBase } from '@/lib/utils';
+import { MessageCircle, Bot, Loader2, AlertCircle, RefreshCw, Eye, Trash2, Send, User } from 'lucide-react';
+
 
 export default function ConversationsPage() {
   const searchParams = useSearchParams();
@@ -15,7 +14,7 @@ export default function ConversationsPage() {
   const [isClient, setIsClient] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('messages');
+  
   
   const { 
     conversations, 
@@ -36,22 +35,10 @@ export default function ConversationsPage() {
     }
   }, [fetchConversations, isClient]);
 
-  // Sync tab with URL
-  useEffect(() => {
-    const tab = searchParams.get('tab') || 'messages';
-    setActiveTab(tab);
-  }, [searchParams]);
 
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    const params = new URLSearchParams(searchParams);
-    if (value === 'messages') {
-      params.delete('tab');
-    } else {
-      params.set('tab', value);
-    }
-    router.push(`/conversations?${params.toString()}`);
-  };
+
+  // Sync tab with URL
+
 
   const handleDeleteConversation = async (conversationId: string) => {
     if (confirm('آیا مطمئن هستید که می‌خواهید این گفتگو را حذف کنید؟')) {
@@ -87,33 +74,100 @@ export default function ConversationsPage() {
             <h1 className="text-2xl font-bold text-gray-900">گفتگوهای مشتریان</h1>
             <p className="text-gray-600 mt-1">مشاهده تمام گفتگوهای مشتریان با ربات</p>
           </div>
-          {activeTab === 'messages' && (
-            <button
-              onClick={() => fetchConversations()}
-              disabled={isLoading}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
-              بروزرسانی
-            </button>
-          )}
+          <button
+            onClick={() => fetchConversations()}
+            disabled={isLoading}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ml-2 ${isLoading ? 'animate-spin' : ''}`} />
+            بروزرسانی
+          </button>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="messages" className="flex items-center space-x-2 space-x-reverse">
-              <MessageCircle className="h-4 w-4" />
-              <span>پیام‌ها</span>
-            </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center space-x-2 space-x-reverse">
-              <User className="h-4 w-4" />
-              <span>کاربران</span>
-            </TabsTrigger>
-          </TabsList>
+        {/* Messages Section */}
+            {/* Conversations List */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="p-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <MessageCircle className="h-5 w-5 ml-2" />
+                  گفتگوهای ذخیره شده
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">مشاهده تمام گفتگوهای مشتریان با ربات</p>
+              </div>
+              
+              <div className="divide-y divide-gray-200">
+                {isLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-blue-600 ml-2" />
+                    <span className="text-gray-600">در حال بارگذاری گفتگوها...</span>
+                  </div>
+                ) : conversations.length === 0 ? (
+                  <div className="flex items-center justify-center p-8 text-gray-500">
+                    <MessageCircle className="h-8 w-8 ml-2" />
+                    <span>هیچ گفتگویی وجود ندارد</span>
+                  </div>
+                ) : (
+                  conversations.map((conversation) => (
+                    <div
+                      key={conversation.id}
+                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => setSelectedConversation(conversation)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3 space-x-reverse">
+                          <div className="flex-shrink-0">
+                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                              <User className="h-5 w-5 text-blue-600" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">
+                              کاربر {conversation.userId}
+                            </p>
+                            <p className="text-sm text-gray-500 truncate">
+                              {conversation.lastMessage}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                          <div className="text-right">
+                            <p className="text-xs text-gray-500">
+                              {formatDate(conversation.lastMessageTime)}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {conversation.messages.length} پیام
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-1 space-x-reverse">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteConversation(conversation.id);
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              title="حذف گفتگو"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedConversation(conversation);
+                              }}
+                              className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                              title="مشاهده گفتگو"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-          {/* Messages Tab */}
-          <TabsContent value="messages" className="space-y-6">
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -253,13 +307,6 @@ export default function ConversationsPage() {
                 </table>
               </div>
             </div>
-          </TabsContent>
-
-          {/* Users Tab */}
-          <TabsContent value="users">
-            <UsersList />
-          </TabsContent>
-        </Tabs>
 
         {/* Conversation Details Modal */}
         {isModalOpen && selectedConversation && (

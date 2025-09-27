@@ -2,11 +2,19 @@
 import React, { useState, useRef, useEffect } from "react";
 import { apiBase } from "@/lib/utils";
 import { searchProductsTool, getCategoriesSummaryTool, checkCategoriesExistTool } from "@/lib/ai/tools";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   products?: any[]; // For product search results
+}
+
+interface ChatResponse {
+  reply: string;
+  order_id?: number;
+  status?: string;
 }
 
 export default function ChatPage() {
@@ -19,8 +27,8 @@ export default function ChatPage() {
   const handleUserMessage = async (userInput: string) => {
     const newMessage: Message = { role: "user", content: userInput };
     setMessages((prev) => [...prev, newMessage]);
-    setInput("");
     setLoading(true);
+    // Don't clear input until response arrives
 
     try {
       let botReply = "";
@@ -40,11 +48,28 @@ export default function ChatPage() {
         console.log('🔍 User asking about products, searching...');
         
         try {
-          // Search for products based on user query
-          const searchResult = await searchProductsTool({ 
-            q: userInput, 
-            limit: 5 
-          });
+          // For general product list requests, get all products instead of searching
+          const isGeneralProductRequest = userInput.toLowerCase().includes('لیست') || 
+                                        userInput.toLowerCase().includes('فهرست') || 
+                                        userInput.toLowerCase().includes('محصولات') ||
+                                        userInput.toLowerCase().includes('کالاها') ||
+                                        userInput.toLowerCase().includes('همه') ||
+                                        userInput.toLowerCase().includes('تمام');
+          
+          let searchResult;
+          if (isGeneralProductRequest) {
+            // Get all products for general requests
+            searchResult = await searchProductsTool({ 
+              q: '', // Empty query to get all products
+              limit: 10 
+            });
+          } else {
+            // Search for specific products
+            searchResult = await searchProductsTool({ 
+              q: userInput, 
+              limit: 5 
+            });
+          }
           
           if (searchResult.success && searchResult.products.length > 0) {
             products = searchResult.products;
@@ -68,7 +93,22 @@ export default function ChatPage() {
             });
             botReply += "برای اطلاعات دقیق‌تر درباره محصول خاصی، کد محصول را بگویید یا شماره آن را انتخاب کنید.";
           } else {
-            botReply = searchResult.message || "متأسفانه محصولی مطابق درخواست شما پیدا نکردم. لطفاً کلمات کلیدی دیگری امتحان کنید یا از دسته‌بندی خاصی بپرسید.";
+            // If no products found, fall back to backend agent
+            console.log('No products found in frontend search, falling back to backend agent...');
+            const response = await fetch(`${apiBase}/api/chat`, {
+              method: "POST",
+              mode: 'cors',
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ 
+                conversation_id: "default", 
+                message: userInput 
+              }),
+            });
+            
+            const data: ChatResponse = await response.json();
+            botReply = data.reply || "متأسفانه محصولی مطابق درخواست شما پیدا نکردم. لطفاً کلمات کلیدی دیگری امتحان کنید یا از دسته‌بندی خاصی بپرسید.";
           }
         } catch (searchError) {
           console.error('Product search failed:', searchError);
@@ -93,7 +133,7 @@ export default function ChatPage() {
 
         console.log("📥 Response status:", response.status);
         
-        const data = await response.json();
+        const data: ChatResponse = await response.json();
         console.log("📥 Response data:", data);
         
         if (data.reply) {
@@ -121,6 +161,8 @@ export default function ChatPage() {
     }
 
     setLoading(false);
+    // Clear input only after response is received
+    setInput("");
   };
 
   const sendMessage = () => {
@@ -142,74 +184,86 @@ export default function ChatPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-indigo-100 p-4 flex flex-col items-center">
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-md p-6 flex flex-col space-y-4">
-        <h1 className="text-xl font-bold text-center">💬 چت با فروشگاه</h1>
-        <div className="flex-1 overflow-y-auto space-y-2 max-h-[60vh]">
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`p-3 rounded-xl max-w-2xl whitespace-pre-wrap ${
-                msg.role === "user"
-                  ? "bg-blue-500 text-white self-end ml-auto"
-                  : "bg-gray-200 text-right"
-              }`}
-            >
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-text-strong">💬 چت با فروشگاه</h1>
+          <p className="text-text-muted mt-1">دستیار خرید هوشمند شما</p>
+        </div>
+
+        {/* Chat Container */}
+        <Card className="h-[70vh] flex flex-col">
+          <CardContent className="flex-1 flex flex-col p-6">
+            <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+              {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`p-4 rounded-xl max-w-2xl whitespace-pre-wrap ${
+                    msg.role === "user"
+                      ? "bg-primary-500 text-white self-end ml-auto"
+                      : "bg-bg-soft text-text-strong self-start mr-auto"
+                  }`}
+                >
               {msg.content}
               
-              {/* Show product images if available */}
-              {msg.products && msg.products.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-300">
-                  <div className="text-sm text-gray-600 mb-2">تصاویر محصولات:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {msg.products.map((product, idx) => (
-                      <div key={idx} className="text-center">
-                        {product.image ? (
-                          <img 
-                            src={product.image} 
-                            alt={product.name}
-                            className="w-16 h-16 object-cover rounded-lg border"
-                            onError={(e) => {
-                              e.currentTarget.src = '/placeholder.svg';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
-                            <span className="text-xs text-gray-500">بدون تصویر</span>
+                  {/* Show product images if available */}
+                  {msg.products && msg.products.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-card/20">
+                      <div className="text-sm text-text-muted mb-2">تصاویر محصولات:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {msg.products.map((product, idx) => (
+                          <div key={idx} className="text-center">
+                            {product.image ? (
+                              <img 
+                                src={product.image} 
+                                alt={product.name}
+                                className="w-16 h-16 object-cover rounded-lg border border-card/20"
+                                onError={(e) => {
+                                  e.currentTarget.src = '/placeholder.svg';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-16 h-16 bg-bg-soft rounded-lg flex items-center justify-center">
+                                <span className="text-xs text-text-muted">بدون تصویر</span>
+                              </div>
+                            )}
+                            <div className="text-xs text-text-muted mt-1 ltr font-mono">{product.code}</div>
                           </div>
-                        )}
-                        <div className="text-xs text-gray-600 mt-1">{product.code}</div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {loading && (
+                <div className="text-text-muted text-sm animate-pulse">
+                  در حال جستجو...
                 </div>
               )}
+              <div ref={bottomRef}></div>
             </div>
-          ))}
-          {loading && (
-            <div className="text-gray-400 text-sm animate-pulse">
-              در حال جستجو...
+            
+            {/* Input Area */}
+            <div className="flex items-center space-x-2 space-x-reverse" dir="rtl">
+              <input
+                className="flex-1 p-3 bg-card border border-card/20 rounded-xl text-text-strong placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                placeholder="سوال خود را درباره محصولات بپرسید..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              />
+              <button
+                className="bg-primary-500 text-white px-4 py-2 rounded-xl hover:bg-primary-600 transition-all duration-200 zimmer-focus-ring"
+                onClick={sendMessage}
+                disabled={loading}
+              >
+                ارسال
+              </button>
             </div>
-          )}
-          <div ref={bottomRef}></div>
-        </div>
-        <div className="flex items-center space-x-2 space-x-reverse" dir="rtl">
-          <input
-            className="flex-1 p-3 rounded-xl border focus:outline-none"
-            placeholder="سوال خود را درباره محصولات بپرسید..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          />
-          <button
-            className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700"
-            onClick={sendMessage}
-            disabled={loading}
-          >
-            ارسال
-          </button>
-        </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

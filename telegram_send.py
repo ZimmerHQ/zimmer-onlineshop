@@ -1,7 +1,7 @@
 import requests
 from sqlalchemy.orm import Session
 from models import BotConfig
-from config import TELEGRAM_TOKEN
+from backend.config import TELEGRAM_BOT_TOKEN as TELEGRAM_TOKEN
 
 def send_telegram_message(chat_id: int, text: str, db: Session = None) -> None:
     """

@@ -7,8 +7,8 @@ export type ProductCreateRequest = {
   stock: number;
   category_id: number;
   image_url?: string;
-  tags?: string[];        // legacy/simple tags if we keep them
-  labels?: string[];      // normalized labels
+  tags?: string;          // Backend expects comma-separated string
+  labels?: string[];      // Backend expects array of strings
   attributes?: ProductAttributes; // e.g. { size: ["M","L"], color: ["black"] }
   is_active?: boolean;
 };
@@ -24,8 +24,8 @@ export type Product = {
   stock: number;
   category_id: number;
   image_url?: string;
-  tags?: string[];
-  labels?: string[];
+  tags?: string;          // Backend returns comma-separated string
+  labels?: string[];      // Backend returns array of strings
   attributes?: ProductAttributes;
   is_active: boolean;
   createdAt?: string;
@@ -44,6 +44,7 @@ export type Product = {
   thumbnail_url?: string;
   images?: string[];
   variants?: any[];  // Product variants
+  variants_count?: number;  // Number of variants for this product
   // Snake_case properties from API response
   created_at?: string;
   updated_at?: string;

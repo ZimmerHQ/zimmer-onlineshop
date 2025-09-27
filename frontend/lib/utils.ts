@@ -32,7 +32,7 @@ export function formatDate(date: Date | string | null | undefined): string {
     return 'Invalid date'
   }
   
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('fa-IR', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -42,8 +42,8 @@ export function formatDate(date: Date | string | null | undefined): string {
 }
 
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('fa-IR', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'IRR',
   }).format(price)
 }

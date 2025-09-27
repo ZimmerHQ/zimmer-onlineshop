@@ -7,7 +7,7 @@ from dataclasses import dataclass
 # Store one "last_list" to resolve numeric selections.
 
 class Slots(BaseModel):
-    product_id: Optional[int] = None
+    product_code: Optional[str] = None
     size: Optional[str] = None
     color: Optional[str] = None
     qty: Optional[int] = 1
@@ -15,6 +15,7 @@ class Slots(BaseModel):
 class ListItem(BaseModel):
     idx: int
     product_id: int
+    product_code: str
     name: str
     price: Optional[float] = None
     sizes: Optional[List[str]] = None
@@ -37,21 +38,16 @@ def merge_slots(base: Slots, delta: Slots) -> Slots:
             setattr(out, k, v)
     return out
 
-def find_by_index(state: ConversationState, maybe_number: str) -> Optional[int]:
-    # map "1" or "۱" to product_id using last_list
-    num = _normalize_digits(maybe_number)
-    try:
-        n = int(num)
-    except Exception:
-        return None
+def find_by_code(state: ConversationState, maybe_code: str) -> Optional[str]:
+    # map product code to product_code using last_list or direct match
     for item in state.last_list:
-        if item.idx == n:
-            return item.product_id
-    return None
+        if item.product_code == maybe_code:
+            return item.product_code
+    return maybe_code if maybe_code else None
 
 def missing_fields(slots: Slots) -> List[str]:
     need = []
-    if slots.product_id is None:
+    if not slots.product_code:
         need.append("product")
     if not slots.size:
         need.append("size")

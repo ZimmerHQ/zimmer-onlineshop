@@ -5,12 +5,16 @@ from typing import List, Optional
 from database import get_db
 from services.order_service import (
     create_draft,
+    create_draft_by_codes,
+    create_draft_by_skus,
     confirm_order,
     update_status,
     get_order,
+    get_order_by_code,
+    get_order_by_reference,
     list_orders
 )
-from schemas.order import OrderDraftIn, OrderConfirmIn, OrderUpdateStatusIn, OrderOut
+from schemas.order import OrderDraftIn, OrderDraftByCodeIn, OrderDraftBySkuIn, OrderConfirmIn, OrderUpdateStatusIn, OrderOut
 
 router = APIRouter(tags=["orders"])
 
@@ -26,6 +30,35 @@ def create_draft_order_endpoint(payload: OrderDraftIn, db: Session = Depends(get
     - Returns the created draft order
     """
     return create_draft(db, payload)
+
+
+@router.post("/draft-by-codes", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+def create_draft_order_by_codes_endpoint(payload: OrderDraftByCodeIn, db: Session = Depends(get_db)):
+    """
+    Create a draft order using product codes and optional customer code.
+    
+    - Creates order with status "draft"
+    - Uses product codes instead of IDs for items
+    - Optionally links to existing customer by customer code
+    - Creates customer snapshot for order history
+    - Returns the created draft order with order_code
+    """
+    return create_draft_by_codes(db, payload)
+
+
+@router.post("/draft-by-skus", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+def create_draft_order_by_skus_endpoint(payload: OrderDraftBySkuIn, db: Session = Depends(get_db)):
+    """
+    Create a draft order using SKU codes and optional customer code.
+    
+    - Creates order with status "draft"
+    - Uses SKU codes for precise variant selection
+    - Automatically consumes stock for each SKU
+    - Optionally links to existing customer by customer code
+    - Creates customer snapshot for order history
+    - Returns the created draft order with order_code
+    """
+    return create_draft_by_skus(db, payload)
 
 
 @router.post("/confirm", response_model=OrderOut)
@@ -77,6 +110,35 @@ def get_order_endpoint(order_id: int, db: Session = Depends(get_db)):
     - Timestamps for all status changes
     """
     return get_order(db, order_id)
+
+
+@router.get("/code/{order_code}", response_model=OrderOut)
+def get_order_by_code_endpoint(order_code: str, db: Session = Depends(get_db)):
+    """
+    Get order by code with all items and details.
+    
+    Returns complete order information including:
+    - Customer details
+    - Order items with product and variant info
+    - Status and payment information
+    - Timestamps for all status changes
+    """
+    return get_order_by_code(db, order_code)
+
+
+@router.get("/ref/{ref}", response_model=OrderOut)
+def get_order_by_reference_endpoint(ref: str, db: Session = Depends(get_db)):
+    """
+    Get order by either ID or code.
+    
+    Automatically detects whether the reference is an ID (integer) or code (ORD-XXXXXX).
+    Returns complete order information including:
+    - Customer details
+    - Order items with product and variant info
+    - Status and payment information
+    - Timestamps for all status changes
+    """
+    return get_order_by_reference(db, ref)
 
 
 @router.get("/", response_model=List[OrderOut])

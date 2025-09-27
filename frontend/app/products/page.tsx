@@ -4,11 +4,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/DashboardLayout'
 import { useDashboardStore } from '@/lib/store'
-import { Plus, Package, Filter, Edit, Trash2, Upload, X, RefreshCw, Search, Eye } from 'lucide-react'
+import { Plus, Package, Filter, Edit, Trash2, Upload, X, RefreshCw, Search, Eye, Layers } from 'lucide-react'
+import { BadgeIcon } from '@/components/ui/badge-icon'
+import { Toolbar, ToolbarLeft, ToolbarRight } from '@/components/ui/toolbar'
 import ProductWizard from '@/components/products/ProductWizard'
 import BulkImportModal from '@/components/imports/BulkImportModal'
 import FiltersBar from '@/components/products/FiltersBar'
 import CategoriesInline from '@/components/products/CategoriesInline'
+import VariantsManager from '@/components/products/VariantsManager'
 import { useProducts } from '@/lib/hooks/useProducts'
 import { useCategories } from '@/lib/hooks/useCategories'
 // import { useDebounce } from '@/lib/hooks/useDebounce'
@@ -38,6 +41,9 @@ export default function ProductsPage() {
   const [showProductWizard, setShowProductWizard] = useState(false)
   const [showProductModal, setShowProductModal] = useState(false)
   const [showBulkImport, setShowBulkImport] = useState(false)
+  const [showVariantsManager, setShowVariantsManager] = useState(false)
+  const [selectedProductForVariants, setSelectedProductForVariants] = useState<any>(null)
+  const [productVariants, setProductVariants] = useState<any[]>([])
   
   // Onboarding state
   const [categoriesExist, setCategoriesExist] = useState<boolean | null>(null)
@@ -223,7 +229,7 @@ export default function ProductsPage() {
     formData.append('file', file)
     
     try {
-      const response = await fetch('http://localhost:8000/upload-image', {
+              const response = await fetch('http://localhost:8000/upload-image', {
         method: 'POST',
         body: formData,
       })
@@ -281,18 +287,18 @@ export default function ProductsPage() {
         }
       }
       
-      const productData = {
-        name: productForm.name,
-        description: productForm.description || "",
-        price: parseFloat(productForm.price) || 0,
-        stock: parseInt(productForm.stock) || 0,
-        category_id: parseInt(productForm.category_id) || 0,
-        image_url: imageUrl || productForm.image_url || undefined,
-        tags: [],
-        labels: [],
-        attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
-        is_active: true
-      };
+             const productData = {
+         name: productForm.name,
+         description: productForm.description || "",
+         price: parseFloat(productForm.price) || 0,
+         stock: parseInt(productForm.stock) || 0,
+         category_id: parseInt(productForm.category_id) || 0,
+         image_url: imageUrl || productForm.image_url || undefined,
+         tags: "", // Backend expects string, not array
+         labels: [], // Backend expects array of strings
+         attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+         is_active: true
+       };
       
       console.log('Sending product data:', productData);
       
@@ -356,6 +362,34 @@ export default function ProductsPage() {
     refetchProducts()
   }
 
+  const loadProductVariants = async (productCode: string) => {
+    try {
+      const response = await fetch(`${apiBase}/api/variants/products/code/${productCode}/variants`)
+      if (response.ok) {
+        const variants = await response.json()
+        setProductVariants(variants)
+      } else {
+        console.error('Failed to load variants:', response.statusText)
+        setProductVariants([])
+      }
+    } catch (error) {
+      console.error('Error loading variants:', error)
+      setProductVariants([])
+    }
+  }
+
+  const handleManageVariants = async (product: any) => {
+    setSelectedProductForVariants(product)
+    await loadProductVariants(product.code)
+    setShowVariantsManager(true)
+  }
+
+  const handleVariantsChange = async (variants: any[]) => {
+    setProductVariants(variants)
+    // Here you could also save the variants to the backend if needed
+    // For now, we'll just update the local state
+  }
+
   // Onboarding guard
   if (categoriesExist === false) {
     return (
@@ -399,22 +433,22 @@ export default function ProductsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">مدیریت محصولات و دسته‌بندی‌ها</h1>
-            <div className="text-gray-600 mt-1">کاتالوگ محصولات و دسته‌بندی‌های خود را مدیریت کنید</div>
+            <h1 className="text-2xl font-bold text-text-strong">مدیریت محصولات و دسته‌بندی‌ها</h1>
+            <div className="text-text-muted mt-1">کاتالوگ محصولات و دسته‌بندی‌های خود را مدیریت کنید</div>
           </div>
           <div className="flex space-x-3 space-x-reverse">
             {activeTab === 'products' && (
               <>
                 <button 
                   onClick={() => setShowBulkImport(true)}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50"
+                  className="inline-flex items-center px-4 py-2 border border-card/20 text-text-strong text-sm font-medium rounded-lg hover:bg-bg-soft/50 transition-all duration-200 zimmer-focus-ring"
                 >
                   <Upload className="h-4 w-4 ml-2" />
                   درون‌ریزی گروهی
                 </button>
                 <button 
                   onClick={() => setShowProductModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 transition-all duration-200 zimmer-focus-ring"
                 >
                   <Plus className="h-4 w-4 ml-2" />
                   افزودن محصول
@@ -466,12 +500,12 @@ export default function ProductsPage() {
             {/* Category Filter Chip */}
             {selectedCategory !== 'all' && (
               <div className="mb-4 flex items-center gap-2 text-sm">
-                <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                <span className="inline-flex items-center rounded-full bg-primary-500/10 px-3 py-1 text-primary-500">
                   دسته‌بندی فعال: {categories?.find(c => c.id.toString() === selectedCategory)?.name}
                 </span>
                 <button
                   type="button"
-                  className="text-red-600 underline hover:text-red-700"
+                  className="text-danger underline hover:text-danger/80 transition-colors"
                   onClick={() => {
                     setSelectedCategory('all')
                     setQuery(router, searchParams, { category_id: null, page: "1" })
@@ -497,19 +531,19 @@ export default function ProductsPage() {
                       }
                     }}
                     placeholder="جستجو در محصولات..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-4 py-2 bg-card border border-card/20 rounded-lg text-text-strong placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
-                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-text-muted" />
                 </div>
                 <button
                   onClick={handleSearch}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                  className="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 transition-all duration-200 zimmer-focus-ring"
                 >
                   جستجو
                 </button>
                 <button
                   onClick={handleClearSearch}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50"
+                  className="px-4 py-2 border border-card/20 text-text-strong text-sm font-medium rounded-lg hover:bg-bg-soft/50 transition-all duration-200 zimmer-focus-ring"
                 >
                   پاک کردن
                 </button>
@@ -527,7 +561,7 @@ export default function ProductsPage() {
                       page: "1" 
                     })
                   }}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 bg-card border border-card/20 rounded-lg text-text-strong focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
                   <option value="all">همه دسته‌بندی‌ها</option>
                   {categories?.map((category) => (
@@ -540,7 +574,7 @@ export default function ProductsPage() {
             </div>
             
             {/* Results Summary */}
-            <div className="text-sm text-gray-600 mb-4">
+            <div className="text-sm text-text-muted mb-4">
               {totalCount > 0 ? (
                 <div>تعداد کل محصولات: {totalCount}</div>
               ) : (
@@ -550,12 +584,12 @@ export default function ProductsPage() {
             
             {products.length === 0 ? (
               <div className="text-center py-8">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">هیچ محصولی یافت نشد</h3>
-                <div className="text-gray-500 mb-4">هنوز محصولی اضافه نکرده‌اید</div>
+                <Package className="h-12 w-12 text-text-muted/30 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-text-strong mb-2">هیچ محصولی یافت نشد</h3>
+                <div className="text-text-muted mb-4">هنوز محصولی اضافه نکرده‌اید</div>
                 <button
                   onClick={() => setShowProductModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 transition-all duration-200 zimmer-focus-ring"
                 >
                   <Plus className="h-4 w-4 ml-2" />
                   افزودن اولین محصول
@@ -564,28 +598,36 @@ export default function ProductsPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {products.map((product) => (
-                  <div key={product.id} className="border border-gray-200 rounded-lg p-4">
+                  <div key={product.id} className="zimmer-card p-4 zimmer-hover-lift">
                     {/* Product Thumbnail */}
                     <div className="mb-3">
-                                              {product.image_url ? (
-                          <img
-                            src={product.image_url}
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
                           alt={product.name}
-                          className="w-full h-32 object-cover rounded-lg border"
+                          className="w-full h-32 object-cover rounded-lg border border-card/20"
                           onError={(e) => {
                             e.currentTarget.src = '/placeholder.svg';
                           }}
                         />
                       ) : (
-                        <div className="w-full h-32 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <Package className="h-12 w-12 text-gray-400" />
+                        <div className="w-full h-32 bg-bg-soft rounded-lg flex items-center justify-center">
+                          <Package className="h-12 w-12 text-text-muted/30" />
                         </div>
                       )}
                     </div>
                     
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium text-gray-900">{product.name}</h3>
-                      <div className="flex space-x-1">
+                      <h3 className="font-medium text-text-strong">{product.name}</h3>
+                      <div className="flex space-x-1 space-x-reverse">
+                        <button
+                          onClick={() => handleManageVariants(product)}
+                          className="p-1 text-success hover:bg-success/10 rounded transition-colors zimmer-focus-ring"
+                          title="مدیریت گونه‌ها"
+                          aria-label="مدیریت گونه‌ها"
+                        >
+                          <Layers className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={() => {
                             setProductForm({
@@ -599,55 +641,59 @@ export default function ProductsPage() {
                             })
                             setShowProductModal(true)
                           }}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          className="p-1 text-primary-500 hover:bg-primary-500/10 rounded transition-colors zimmer-focus-ring"
+                          title="ویرایش محصول"
+                          aria-label="ویرایش محصول"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteProduct(product.id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                          className="p-1 text-danger hover:bg-danger/10 rounded transition-colors zimmer-focus-ring"
+                          title="حذف محصول"
+                          aria-label="حذف محصول"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
                     
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-text-muted">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-mono text-lg font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        <span className="ltr font-mono text-lg font-bold text-primary-500 bg-primary-500/10 px-2 py-1 rounded">
                           {product.code}
                         </span>
                         <span className={`px-2 py-1 rounded-full text-xs ${
                           product.is_active 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
+                            ? 'bg-success/10 text-success' 
+                            : 'bg-danger/10 text-danger'
                         }`}>
                           {product.is_active ? 'فعال' : 'غیرفعال'}
                         </span>
                       </div>
                       
-                      {product.description && <div className="text-gray-600 mb-2">{product.description}</div>}
+                      {product.description && <div className="text-text-muted mb-2">{product.description}</div>}
                       
                       <div className="space-y-1">
                         <div className="flex justify-between">
                           <span>قیمت:</span>
-                          <span className="font-medium">{new Intl.NumberFormat('fa-IR').format(product.price)} تومان</span>
+                          <span className="font-medium ltr">{new Intl.NumberFormat('fa-IR').format(product.price)} تومان</span>
                         </div>
                         <div className="flex justify-between">
                           <span>موجودی:</span>
                           <div className="flex items-center space-x-2 space-x-reverse">
-                            <span className={`font-medium ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className={`font-medium ${product.stock > 0 ? 'text-success' : 'text-danger'}`}>
                               {product.stock || 0}
                             </span>
                             {product.stock <= 5 && product.stock > 0 && (
-                              <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
+                              <span className="px-2 py-1 text-xs bg-warning/10 text-warning rounded-full">
                                 کم‌موجودی
                               </span>
                             )}
                           </div>
                         </div>
                         {product.stock <= 5 && product.stock > 0 && (
-                          <div className="flex justify-between text-xs text-gray-500">
+                          <div className="flex justify-between text-xs text-text-muted">
                             <span>آستانه:</span>
                             <span>5</span>
                           </div>
@@ -655,9 +701,15 @@ export default function ProductsPage() {
                         {product.category_name && (
                           <div className="flex justify-between">
                             <span>دسته‌بندی:</span>
-                            <span className="text-blue-600">{product.category_name}</span>
+                            <span className="text-primary-500">{product.category_name}</span>
                           </div>
                         )}
+                        <div className="flex justify-between">
+                          <span>گونه‌ها:</span>
+                          <span className="text-success font-medium">
+                            {product.variants_count || 1} گونه
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -830,6 +882,20 @@ export default function ProductsPage() {
             refetchProducts(1, 20, selectedCategory === 'all' ? undefined : parseInt(selectedCategory), searchQuery)
           }}
         />
+
+        {/* Variants Manager Modal */}
+        {showVariantsManager && selectedProductForVariants && (
+          <VariantsManager
+            product={selectedProductForVariants}
+            variants={productVariants}
+            onVariantsChange={handleVariantsChange}
+            onClose={() => {
+              setShowVariantsManager(false)
+              setSelectedProductForVariants(null)
+              setProductVariants([])
+            }}
+          />
+        )}
       </div>
     </DashboardLayout>
   )

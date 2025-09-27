@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, Enum, Numeric, JSON, func
+from sqlalchemy.orm import relationship, mapped_column, Mapped
 from datetime import datetime
 import enum
 
@@ -18,6 +18,21 @@ class PaymentStatus(enum.Enum):
     PAID = "paid"
     FAILED = "failed"
     REFUNDED = "refunded"
+
+class Customer(Base):
+    __tablename__ = "customers"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    first_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    phone: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    postal_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=True)
+    customer_code: Mapped[str] = mapped_column(String(50), nullable=True, index=True)  # Will be NOT NULL after backfill
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+
+    orders: Mapped[list["Order"]] = relationship("Order", back_populates="customer")
 
 class User(Base):
     __tablename__ = "users"
@@ -58,9 +73,14 @@ class Order(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     order_number = Column(String, unique=True, index=True)  # e.g., "ORD-2024-001"
+    order_code = Column(String(50), nullable=True, index=True)  # Stable business code, will be NOT NULL after backfill
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Optional for guest orders
     
-    # Customer Information
+    # CRM Integration
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    customer_snapshot = Column(JSON, nullable=True)  # Immutable copy at purchase time
+    
+    # Customer Information (legacy fields, kept for backward compatibility)
     customer_name = Column(String, nullable=False)
     customer_phone = Column(String, nullable=False)
     customer_address = Column(Text, nullable=True)
@@ -71,6 +91,7 @@ class Order(Base):
     shipping_cost = Column(Float, default=0.0)
     discount_amount = Column(Float, default=0.0)
     final_amount = Column(Float, nullable=False)
+    items_count = Column(Integer, default=0)  # Total quantity of items
     
     # Status and Payment
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
@@ -95,6 +116,7 @@ class Order(Base):
     
     # Relationships
     user = relationship("User", back_populates="orders")
+    customer = relationship("Customer", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     receipts = relationship("Receipt", back_populates="order")
 
@@ -108,17 +130,23 @@ class OrderItem(Base):
     
     # Product details at time of order (in case product changes later)
     product_name = Column(String, nullable=False)
+    product_code = Column(String, nullable=False)  # Store product code snapshot
     product_price = Column(Float, nullable=False)
     product_image_url = Column(String, nullable=True)
     
-    # Variant details
+    # Variant details (new system)
+    sku_code = Column(String(50), nullable=True, index=True)  # SKU code for variant
+    variant_attributes_snapshot = Column(JSON, nullable=True)  # Snapshot of variant attributes
+    unit_price_snapshot = Column(Numeric(10, 2), nullable=True)  # Snapshot of unit price
+    
+    # Legacy variant details (backward compatibility)
     variant_size = Column(String, nullable=True)
     variant_color = Column(String, nullable=True)
     
     # Order details
     quantity = Column(Integer, nullable=False, default=1)
     size = Column(String, nullable=True)  # Legacy field, keep for backward compatibility
-    unit_price = Column(Float, nullable=False)
+    unit_price = Column(Float, nullable=False)  # Unit price snapshot (base + variant delta)
     total_price = Column(Float, nullable=False)
     
     # Relationships
@@ -181,6 +209,7 @@ class Product(Base):
     tags = Column(String, nullable=True)  # Comma-separated keywords
     labels_json = Column(Text, nullable=True)  # JSON array of labels
     attributes_json = Column(Text, nullable=True)  # JSON dict of attributes (key -> list[str])
+    attribute_schema = Column(JSON, nullable=True)  # Schema defining required attributes and allowed values
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -195,14 +224,22 @@ class ProductVariant(Base):
     __tablename__ = "product_variants"
     
     id = Column(Integer, primary_key=True, index=True)
+    sku_code = Column(String(50), unique=True, nullable=False, index=True)  # Primary SKU identifier
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    attributes = Column(JSON, nullable=False, default={})  # Generic attributes (color, size, capacity, etc.)
+    price_override = Column(Numeric(10, 2), nullable=True)  # Override product price if needed
+    stock_qty = Column(Integer, default=0, nullable=False)  # Current stock quantity
+    is_active = Column(Boolean, default=True, nullable=False, index=True)  # Whether variant is available
+    attributes_hash = Column(String(64), nullable=True)  # Hash of attributes for uniqueness
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Legacy fields for backward compatibility
     size = Column(String, nullable=True)  # e.g., "S", "M", "L", "XL", "43", "44"
     color = Column(String, nullable=True)  # e.g., "قرمز", "آبی", "مشکی"
     sku = Column(String, nullable=True)  # Stock Keeping Unit (optional)
     stock = Column(Integer, default=0, nullable=False)
     price_delta = Column(Float, default=0.0, nullable=False)  # Optional price adjustment
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # Relationship to product
     product = relationship("Product", back_populates="variants")
@@ -321,3 +358,46 @@ class SalesReport(Base):
     
     def __repr__(self):
         return f"<SalesReport(id={self.id}, period='{self.period}', {self.start_date} to {self.end_date})>"
+
+class SupportRequestStatus(enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+class SupportRequest(Base):
+    __tablename__ = "support_requests"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[SupportRequestStatus] = mapped_column(Enum(SupportRequestStatus), default=SupportRequestStatus.PENDING)
+    telegram_user_id: Mapped[str] = mapped_column(String(50), nullable=True)  # For future Telegram integration
+    admin_notes: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<SupportRequest(id={self.id}, customer='{self.customer_name}', status='{self.status}')>"
+
+
+class ZimmerTenant(Base):
+    __tablename__ = "zimmer_tenants"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_automation_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    integration_status: Mapped[str] = mapped_column(String(20), default="pending")
+    service_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    demo_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    paid_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    kb_status: Mapped[str] = mapped_column(String(20), default="empty")
+    kb_last_updated: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    kb_total_documents: Mapped[int] = mapped_column(Integer, default=0)
+    kb_healthy: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<ZimmerTenant(user_automation_id={self.user_automation_id}, status='{self.integration_status}')>"
