@@ -120,7 +120,7 @@ export default function ProductWizard({ isOpen, onClose, onSuccess }: ProductWiz
         stock: parseInt(productForm.stock) || 0,
         category_id: selectedCategory.id,
         image_url: productForm.image_url || undefined,
-        tags: productForm.tags ? [productForm.tags] : [],
+        tags: productForm.tags || "",
         labels,
         attributes: Object.keys(attributes).length ? attributes : undefined,
         is_active: true,
