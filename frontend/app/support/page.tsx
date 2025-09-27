@@ -193,8 +193,8 @@ export default function SupportPage() {
                     
                     <div className="flex items-center space-x-4 text-xs text-gray-400">
                       <span>درخواست شده {formatDate(new Date(request.created_at))}</span>
-                      {request.updatedAt && (
-                        <span>رسیدگی شده {formatDate(request.updatedAt)}</span>
+                      {request.updated_at && (
+                        <span>رسیدگی شده {formatDate(request.updated_at)}</span>
                       )}
                     </div>
                   </div>
@@ -280,8 +280,8 @@ export default function SupportPage() {
                     
                     <div className="flex items-center space-x-4 text-xs text-gray-400">
                       <span>درخواست شده {formatDate(new Date(request.created_at))}</span>
-                      {request.updatedAt && (
-                        <span>رسیدگی شده {formatDate(request.updatedAt)}</span>
+                      {request.updated_at && (
+                        <span>رسیدگی شده {formatDate(request.updated_at)}</span>
                       )}
                     </div>
                   </div>
