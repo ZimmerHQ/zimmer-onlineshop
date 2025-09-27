@@ -607,7 +607,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (response.ok) {
         set(state => ({
           supportRequests: state.supportRequests.map(r => 
-            r.id === id ? { ...r, status: 'resolved' } : r
+            r.id === parseInt(id) ? { ...r, status: 'resolved' } : r
           )
         }));
       }
