@@ -130,8 +130,8 @@ export default function OrderDetailsPage() {
                 <p className="text-sm text-gray-600">وضعیت فعلی سفارش</p>
               </div>
             </div>
-            <span className={`px-3 py-1 text-sm font-medium rounded-full border ${statusColors[order.status]}`}>
-              {statusLabels[order.status]}
+            <span className={`px-3 py-1 text-sm font-medium rounded-full border ${statusColors[order.status as keyof typeof statusColors] || 'bg-gray-100 text-gray-800 border-gray-200'}`}>
+              {statusLabels[order.status as keyof typeof statusLabels] || 'نامشخص'}
             </span>
           </div>
         </div>

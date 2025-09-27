@@ -293,7 +293,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           stock: 22,
           category_id: 1,
           image_url: 'https://placehold.co/400x400/cccccc/666666?text=تصویر+موجود+نیست',
-          tags: ['کتانی', 'پیاده‌روی'],
+          tags: 'کتانی,پیاده‌روی',
           labels: ['کفش', 'کتانی'],
           attributes: { size: ['36', '37', '38', '39', '40'] },
           is_active: true,
