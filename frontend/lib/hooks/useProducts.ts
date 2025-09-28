@@ -36,7 +36,7 @@ export function useProducts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://193.162.129.246:8000';
 
   const fetchProducts = async (page = 1, pageSize = 20, categoryId?: number, searchQuery?: string) => {
     try {

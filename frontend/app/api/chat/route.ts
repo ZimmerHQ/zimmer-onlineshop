@@ -10,7 +10,7 @@ export async function POST(req: Request) {
 
     // Send message to backend API with proper payload format
     const backendResponse = await fetch(
-      (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000") + "/api/chat",
+      (process.env.NEXT_PUBLIC_API_BASE_URL || "http://193.162.129.246:8000") + "/api/chat",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
