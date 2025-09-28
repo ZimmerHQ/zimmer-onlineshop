@@ -36,6 +36,7 @@ CORS_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:8006",  # Add local development port
     "http://127.0.0.1:8006",  # Add local development port
+    "http://193.162.129.246:3000",  # Add server frontend URL
 ]
 
 # Add any additional CORS origins from environment

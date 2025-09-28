@@ -6,9 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Dynamic API base URL for production/development
-export const apiBase = process.env.NODE_ENV === 'production' 
-  ? (typeof window !== 'undefined' ? window.location.origin : '') 
-  : "http://193.162.129.246:8000"
+export const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://193.162.129.246:8000"
 
 // CORS-friendly fetch options
 export const fetchOptions = {
