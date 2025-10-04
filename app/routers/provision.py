@@ -9,7 +9,7 @@ from typing import Union
 from database import get_db
 from app.services.users_service import UsersService
 from app.core.service_token import require_service_token
-from app.core.settings import WEBHOOK_PATH_TEMPLATE
+from app.core.settings import WEBHOOK_PATH_TEMPLATE, DEFAULT_AUTOMATION_ID
 
 router = APIRouter()
 
@@ -48,8 +48,8 @@ async def provision_user(
     users_service = UsersService(db)
     
     try:
-        # Convert user_automation_id to string for consistency
-        automation_id = str(provision_data.user_automation_id)
+        # Use DEFAULT_AUTOMATION_ID for consistency with usage API
+        automation_id = DEFAULT_AUTOMATION_ID
         
         # Ensure user exists with demo tokens
         user = users_service.ensure_user(
