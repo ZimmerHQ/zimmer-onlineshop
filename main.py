@@ -17,6 +17,8 @@ print_config_summary()
 
 # Create database tables
 from database import engine, Base
+# Import Zimmer models to ensure they're registered
+from app.models.zimmer import AutomationUser, UserSession, UsageLedger
 logger.info("📋 Creating database tables...")
 Base.metadata.create_all(bind=engine)
 logger.info("✅ Database tables created successfully")
@@ -129,6 +131,19 @@ app.include_router(support_router, prefix="/api/support", tags=["support"])
 # Add Zimmer router
 from routers.zimmer import router as zimmer_router
 app.include_router(zimmer_router)
+
+# Add Zimmer integration routers
+from app.routers.dashboard import router as dashboard_router
+app.include_router(dashboard_router)
+
+from app.routers.provision import router as provision_router
+app.include_router(provision_router)
+
+from app.routers.usage import router as usage_router
+app.include_router(usage_router)
+
+from app.routers.health import router as zimmer_health_router
+app.include_router(zimmer_health_router)
 
 # Add static files serving
 app.mount("/static", StaticFiles(directory="static"), name="static")
